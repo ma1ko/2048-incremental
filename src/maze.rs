@@ -1,28 +1,19 @@
+#![allow(dead_code)]
 use std::collections::HashSet;
 use std::{collections::HashMap, fmt::Display};
 
+use console::Key;
 use rand::Rng;
-
 fn main() {
-    let mut board: Board<Field> = Board::new();
-    for i in 0..50 {
-        for j in 0..20 {
+    let max = Point(50,20);
+    let mut board: Board<Field> = Board::new(max);
+    for i in 0..max.0 {
+        for j in 0..max.1 {
             board.board.insert(Point(i, j), Field::new(Point(i, j)));
         }
     }
 
-    // let mut iter = board.iter_mut();
-    // while let Some(mut row) = iter.next() {
-    //     while let Some(field) = row.next() {
-    //         println!("{:?}", field);
-    //     }
-    // }
-    // println!("{}", board);
-    // let mut iter = board.iter_mut();
-    // while let Some(field) = iter.next() {
-    //     field.left = false;
-    //     // println!("{}", field);
-    // }
+
     board.aldous_broder();
     println!("{}", board);
 
@@ -34,62 +25,58 @@ fn main() {
 }
 
 #[derive(PartialEq, Eq, Debug, Hash, Copy, Clone)]
-struct Point(usize, usize);
+pub struct Point(pub usize, pub usize);
 
 impl Point {
-    fn right(self) -> Self {
+    pub fn right(self) -> Self {
         Point(self.0 + 1, self.1)
     }
-    fn left(self) -> Self {
+    pub fn left(self) -> Self {
         Point(self.0.wrapping_sub(1), self.1)
     }
-    fn down(self) -> Self {
+    pub fn down(self) -> Self {
         Point(self.0, self.1 + 1)
     }
-    fn up(self) -> Self {
+    pub fn up(self) -> Self {
         Point(self.0, self.1.wrapping_sub(1))
     }
-    fn go(self, d: Direction) -> Self {
+    pub fn go(self, d: Direction) -> Self {
         match d {
             Left => self.left(),
             Right => self.right(),
             Up => self.up(),
             Down => self.down(),
+            Nowhere => self,
         }
     }
 }
 
-struct Board<T> {
-    board: HashMap<Point, T>,
+pub struct Board<T> {
+    pub board: HashMap<Point, T>,
+    pub max: Point,
     longest_path: usize,
 }
 impl Board<Field> {
     pub fn visit(&mut self, p: Point, mut steps: usize) {
-        // println!("{:?}, steps: {}", p, steps);
         let current = self.board.remove(&p);
         if let Some(mut current) = current {
             if current.steps == 0 || current.steps >= steps {
                 current.steps = steps;
                 self.longest_path = self.longest_path.max(steps);
-                // println!("{:?}, Setting: {}", p, steps);
                 steps = steps + 1;
-                // if current.path.contains(&Left) {
                 if !current.wall.contains(&Down) {
                     self.visit(p.left(), steps);
                 }
                 if let Some(x) = self.board.get(&p.right()) {
                     if !x.wall.contains(&Down) {
-                        // if current.path.contains(&Right) {
                         self.visit(p.right(), steps);
                     }
                 }
                 if !current.wall.contains(&Right) {
-                    // if current.path.contains(&Up) {
                     self.visit(p.up(), steps);
                 }
                 if let Some(x) = self.board.get(&p.down()) {
                     if !x.wall.contains(&Right) {
-                        // if current.path.contains(&Down) {
                         self.visit(p.down(), steps);
                     }
                 }
@@ -144,6 +131,7 @@ impl Board<Field> {
                                 .map(|f| f.wall.remove(&Left));
                             new.wall.remove(&Right);
                         }
+                        Nowhere => panic!("Can't move nowhere"),
                     }
                 }
                 self.board.insert(p, current);
@@ -155,6 +143,9 @@ impl Board<Field> {
     }
 }
 impl<T: 'static> Board<T> {
+    pub fn insert(&mut self, point: Point, v: T) {
+        self.board.insert(point, v);
+    }
     pub fn iter(&self) -> BoardIter<'_, T> {
         let f = |p: Point, board: &Board<T>| {
             if board.get(&p.right()).is_some() {
@@ -189,9 +180,35 @@ impl<T: 'static> Board<T> {
         }
         rows.into_iter()
     }
+    pub fn rows_mut(&mut self) -> std::vec::IntoIter<BoardIterMut<'_, T>> {
+        let mut rows = Vec::new();
+        let mut y = 0;
+        let me = self as *mut Self;
+
+        while let Some(_) = self.board.get(&Point(0, y)) {
+            let me = unsafe { &mut *me };
+            let iter = BoardIterMut::new(me, Box::new(|p, _| p.right()), Point(0, y));
+            rows.push(iter);
+            y += 1;
+        }
+        rows.into_iter()
+    }
+    pub fn rows_mut_rev(&mut self) -> std::vec::IntoIter<BoardIterMut<'_, T>> {
+        let mut rows = Vec::new();
+        let mut y = 0;
+        let me = self as *mut Self;
+        while let Some(_) = self.board.get(&Point(0, y)) {
+            let me = unsafe { &mut *me };
+            let iter = BoardIterMut::new(me, Box::new(|p, _| p.left()), Point(self.max.0 - 1, y));
+            rows.push(iter);
+            y += 1;
+        }
+        rows.into_iter()
+    }
     pub fn columns(&self) -> std::vec::IntoIter<BoardIter<'_, T>> {
         let mut rows = Vec::new();
         let mut x = 0;
+
         while let Some(_) = self.board.get(&Point(x, 0)) {
             let iter = BoardIter::new(self, Box::new(|p, _| p.down()), Point(x, 0));
             rows.push(iter);
@@ -199,8 +216,36 @@ impl<T: 'static> Board<T> {
         }
         rows.into_iter()
     }
-    fn new() -> Self {
+    pub fn columns_mut(&mut self) -> std::vec::IntoIter<BoardIterMut<'_, T>> {
+        let mut columns = Vec::new();
+        let mut x = 0;
+        let me = self as *mut Self;
+
+        while let Some(_) = self.board.get(&Point(x, 0)) {
+            let me = unsafe { &mut *me };
+            let iter = BoardIterMut::new(me, Box::new(|p, _| p.down()), Point(x, 0));
+            columns.push(iter);
+            x += 1;
+        }
+        columns.into_iter()
+    }
+    pub fn columns_mut_rev(&mut self) -> std::vec::IntoIter<BoardIterMut<'_, T>> {
+        let mut columns = Vec::new();
+        let mut x = 0;
+        let me = self as *mut Self;
+
+        while let Some(_) = self.board.get(&Point(x, 0)) {
+            let me = unsafe { &mut *me };
+            let iter = BoardIterMut::new(me, Box::new(|p, _| p.up()), Point(x, self.max.1 - 1));
+            columns.push(iter);
+            x += 1;
+        }
+        columns.into_iter()
+    }
+
+    pub fn new(max: Point) -> Self {
         Board {
+            max,
             board: HashMap::new(),
             longest_path: 0,
         }
@@ -214,13 +259,13 @@ impl<T: 'static + Display> Display for Board<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.rows().try_for_each(|mut x| {
             x.try_for_each(|x| write!(f, "{}", x))?;
-            writeln!(f, "")
+            write!(f, "\r\n")
         })
     }
 }
 
 type PointFn<T> = dyn Fn(Point, &Board<T>) -> Point;
-struct BoardIter<'a, T> {
+pub struct BoardIter<'a, T> {
     current: Point,
     f: Box<PointFn<T>>,
     board: &'a Board<T>,
@@ -238,7 +283,7 @@ impl<'a, T> Iterator for BoardIter<'a, T> {
         current
     }
 }
-struct BoardIterMut<'a, T: 'a> {
+pub struct BoardIterMut<'a, T: 'a> {
     current: Point,
     f: Box<dyn Fn(Point, &Board<T>) -> Point>,
     board: &'a mut Board<T>,
@@ -251,26 +296,26 @@ impl<'a, T> BoardIterMut<'a, T> {
 impl<'a, T: 'a> Iterator for BoardIterMut<'a, T> {
     type Item = &'a mut T;
     fn next(&mut self) -> Option<Self::Item> {
-        unimplemented!();
-        // TODO off by one
-        self.current = (self.f)(self.current, &self.board);
         let item: Option<&mut T> = self.board.board.get_mut(&self.current);
         if let Some(item) = item {
             let item = item as *mut T;
             let item = unsafe { &mut *item };
+            self.current = (self.f)(self.current, &self.board);
             return Some(item);
         }
         None
     }
 }
 
+
 use Direction::*;
 #[derive(Hash, PartialEq, Eq, Clone, Copy)]
-enum Direction {
+pub enum Direction {
     Left,
     Up,
     Right,
     Down,
+    Nowhere,
 }
 impl Direction {
     fn opposite(self) -> Self {
@@ -279,6 +324,23 @@ impl Direction {
             Right => Left,
             Up => Down,
             Down => Up,
+            Nowhere => Nowhere,
+        }
+    }
+}
+use console::Key::*;
+impl From<Key> for Direction {
+    fn from(k: Key) -> Self {
+        match k {
+            ArrowUp => Up,
+            ArrowDown => Down,
+            ArrowLeft => Left,
+            ArrowRight => Right,
+            Char('w') => Up,
+            Char('a') => Left,
+            Char('s') => Down,
+            Char('d') => Right,
+            _ => Nowhere,
         }
     }
 }
@@ -315,7 +377,12 @@ impl Field {
 impl Display for Field {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let wall = &self.wall;
-        write!(f, "\u{001b}[48;2;{};00;{}m", self.steps  , (self.steps * 50).min(50) )?;
+        write!(
+            f,
+            "\u{001b}[48;2;{};00;{}m",
+            self.steps,
+            (self.steps * 50).min(50)
+        )?;
         match (
             wall.contains(&Left),
             wall.contains(&Up),
