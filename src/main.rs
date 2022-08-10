@@ -1,133 +1,146 @@
-mod maze;
-use itertools::{self, Itertools};
-use std::fmt::Display;
+use yew::prelude::*;
 
-use maze::Direction::*;
-use maze::*;
-use rand::Rng;
-use termion::raw::IntoRawMode;
-struct Cleanup {}
-impl Drop for Cleanup {
-    fn drop(&mut self) {
-        let raw_term = std::io::stdout().into_raw_mode().unwrap();
-        raw_term.suspend_raw_mode().unwrap();
-        // println!("\u{001B}[?1049l");
+mod maze;
+mod twentyfourtyeight;
+
+use std::collections::HashMap;
+use twentyfourtyeight::Field;
+
+fn color(value: usize) -> &'static str {
+    match value {
+        0 => "bg-blue-50",
+        2 => "bg-blue-100",
+        4 => "bg-blue-400",
+        8 => "bg-blue-700",
+        16 => "bg-red-100",
+        32 => "bg-red-400",
+        64 => "bg-red-700",
+        128 => "bg-green-100",
+        256 => "bg-green-400",
+        512 => "bg-green-700",
+        _ => "",
     }
 }
 
-fn iter_board(iter: std::vec::IntoIter<BoardIterMut<Field>>) -> bool {
-    iter.map(|mut row| {
-        let first = row.next().unwrap();
-        let (_, moved) = row.fold((first, false), |(acc, mov), field| {
-            let moved = field.combine(acc);
-            return (field, moved || mov);
-        });
-        moved
-    })
-    .fold(false, |state, x| x || state)
+struct YewField {
+    value: Option<usize>,
+}
+
+#[derive(PartialEq, Properties)]
+pub struct Props {
+    value: Option<usize>,
+}
+impl Component for YewField {
+    type Message = ();
+    type Properties = Props;
+
+    fn create(ctx: &Context<Self>) -> Self {
+        Self {
+            value: ctx.props().value,
+        }
+    }
+    fn view(&self, _ctx: &Context<Self>) -> Html {
+        let value = if let Some(value) = self.value {
+            value.to_string()
+        } else {
+            "".to_string()
+        };
+        let mut classes = classes!(
+            "text-red-900",
+            "text-center",
+            "p-20",
+            "text-5xl",
+            color(self.value.unwrap_or(0))
+        );
+        classes.push("a");
+        html! {
+            <div class={classes}>{value}</div>
+        }
+    }
+    // fn update(&mut self, _ctx: &Context<Self>, _msg: Self::Message) -> bool {
+    //     true
+    // }
+    fn changed(&mut self, ctx: &Context<Self>) -> bool {
+        if ctx.props().value != self.value {
+            self.value = ctx.props().value;
+            true
+        } else {
+            false
+        }
+    }
+}
+
+#[derive(Debug)]
+enum Msg {
+    Key(KeyboardEvent),
+    Click(),
+}
+
+use maze::Board;
+use maze::Direction;
+use maze::Point;
+struct Model {
+    board: Board<Field>,
+}
+
+impl Component for Model {
+    type Message = Msg;
+    type Properties = ();
+
+    fn create(_ctx: &Context<Self>) -> Self {
+        let max = Point(4, 4);
+        let mut board: Board<Field> = Board::new(max);
+        for i in 0..max.0 {
+            for j in 0..max.1 {
+                board.insert(Point(i, j), Field::new(None));
+            }
+        }
+        board.insert(Point(0, 0), Field::new(Some(2)));
+
+        Self { board }
+    }
+
+    fn update(&mut self, _ctx: &Context<Self>, msg: Self::Message) -> bool {
+        match msg {
+            Msg::Key(key) => match key.key_code() {
+                37 => self.board.play(Direction::Left),
+                38 => self.board.play(Direction::Up),
+                39 => self.board.play(Direction::Right),
+                40 => self.board.play(Direction::Down),
+                _ => false,
+            },
+            Msg::Click() => {false}
+        };
+        true
+    }
+
+    fn view(&self, ctx: &Context<Self>) -> Html {
+        // This gives us a component's "`Scope`" which allows us to send messages, etc to the component.
+        let link = ctx.link();
+
+        let html: Html = self
+            .board
+            .rows()
+            .map(|row| {
+                row.map(|field| {
+                    html! {<YewField value={field.value}/>}
+                })
+            })
+            .flatten()
+            .collect();
+ 
+
+        html! {
+            <div class={classes!("grid", "grid-cols-4", "gap-2", "h-screen")}
+                onkeydown={link.callback(|key| Msg::Key(key))} tabindex=0 >
+                {html}
+            </div>
+        }
+    }
 }
 
 fn main() {
-    let _ = Cleanup {};
-    let raw_term = std::io::stdout().into_raw_mode().unwrap();
-    let max = Point(4, 4);
-    let mut board: Board<Field> = Board::new(max);
-    for i in 0..max.0 {
-        for j in 0..max.1 {
-            board.insert(Point(i, j), Field::new(None));
-        }
-    }
-    board.insert(Point(0, 0), Field::new(Some(1)));
-    println!("{}", board);
-
-    let term = console::Term::stdout();
-    loop {
-        print!("{}\r\n", board);
-        let key = term.read_key().unwrap();
-        let direction: Direction = key.into();
-        let mut any_change = false;
-        loop {
-            let change = match direction {
-                Right => iter_board(board.rows_mut()),
-                Left => iter_board(board.rows_mut_rev()),
-                Up => iter_board(board.columns_mut_rev()),
-                Down => iter_board(board.columns_mut()),
-                Nowhere => continue,
-            };
-            any_change = any_change || change;
-            if !change {
-                break;
-            }
-        }
-        if !any_change {
-            continue;
-        }
-        // spawn
-        let mut rng = rand::thread_rng();
-        if board.iter().all(|field| field.value.is_some()) {
-            print!("You lost \r\n");
-            break;
-        }
-        loop {
-            let p = Point(rng.gen_range(0..4), rng.gen_range(0..4));
-            if board.board.get(&p).unwrap().value.is_none() {
-                board.insert(p, Field::new(Some(1)));
-                break;
-            }
-        }
-    }
-}
-// impl Display for Board<Field> {
-//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-//         self.rows().try_for_each(|row| {
-//             writeln!(f, "")?;
-//             row.try_for_each(|field|{
-//                 write!(f, "{}", field)
-
-//             })
-
-//         })
-//     }
-
-//}
-
-#[derive(Eq, PartialEq, Clone, Copy)]
-struct Field {
-    value: Option<usize>,
-}
-impl Field {
-    fn new(value: Option<usize>) -> Self {
-        Self { value }
-    }
-    fn combine(&mut self, other: &mut Field) -> bool {
-        if let Some(value) = &mut self.value {
-            if let Some(other_value) = &other.value {
-                if value == other_value {
-                    *value = *value + 1;
-                    other.value = None;
-                    true
-                } else {
-                    false
-                }
-            } else {
-                false
-            }
-        } else {
-            if other.value.is_some() {
-                self.value = other.value.take();
-                true
-            } else {
-                false
-            }
-        }
-    }
-}
-impl Display for Field {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if let Some(val) = self.value {
-            write!(f, "{}", val)
-        } else {
-            write!(f, " ")
-        }
-    }
+    wasm_logger::init(wasm_logger::Config::default());
+    yew::start_app::<Model>();
+    log::info!("starting");
 }
