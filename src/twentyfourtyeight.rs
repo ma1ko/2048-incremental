@@ -1,15 +1,16 @@
-use itertools::{self, Itertools};
 use std::fmt::Display;
 
 use crate::maze::Direction::*;
 use crate::maze::*;
 use rand::Rng;
-// use termion::raw::IntoRawMode;
+#[cfg(target_arch = "x86_64")]
+use termion::raw::IntoRawMode;
 struct Cleanup {}
+#[cfg(target_arch = "x86_64")]
 impl Drop for Cleanup {
     fn drop(&mut self) {
-        // let raw_term = std::io::stdout().into_raw_mode().unwrap();
-        // raw_term.suspend_raw_mode().unwrap();
+        let raw_term = std::io::stdout().into_raw_mode().unwrap();
+        raw_term.suspend_raw_mode().unwrap();
         // println!("\u{001B}[?1049l");
     }
 }
@@ -26,9 +27,10 @@ fn iter_board(iter: std::vec::IntoIter<BoardIterMut<Field>>) -> bool {
     .fold(false, |state, x| x || state)
 }
 
-fn main() {
-    // let _ = Cleanup {};
-    // let raw_term = std::io::stdout().into_raw_mode().unwrap();
+pub fn main() {
+    let _ = Cleanup {};
+    #[cfg(target_arch = "x86_64")]
+    let _raw_term = std::io::stdout().into_raw_mode().unwrap();
     let max = Point(4, 4);
     let mut board: Board<Field> = Board::new(max);
     for i in 0..max.0 {
@@ -67,14 +69,16 @@ impl Board<Field> {
         if !any_change {
             return false;
         }
-        // spawn
-        let mut rng = rand::thread_rng();
+        // check if lost (doesn't work currently)
         if self.iter().all(|field| field.value.is_some()) {
-            log::info!("You lost \r\n");
+            log::info!("You lost");
             return true;
         }
+        // spawn random 2
+        let mut rng = rand::thread_rng();
         loop {
-            let p = Point(rng.gen_range(0..4), rng.gen_range(0..4));
+            let max = self.max;
+            let p = Point(rng.gen_range(0..max.0), rng.gen_range(0..max.1));
             if self.board.get(&p).unwrap().value.is_none() {
                 self.board.insert(p, Field::new(Some(2)));
                 break;
