@@ -15,10 +15,11 @@ use crate::upgrade::*;
 //     pub text: &'static str,
 // }
 
+use std::rc::Rc;
 #[derive(PartialEq, Properties, Clone)]
 pub struct Props {
     pub points: usize,
-    pub upgrade: Upgrade,
+    pub upgrade: Rc<Upgrade>,
 }
 
 impl UpgradeButton {
@@ -60,16 +61,12 @@ impl Component for UpgradeButton {
             "shadow"
         );
         let upgrade = self.props.upgrade.clone();
-        let board = Dispatch::<UpgradeableBoard>::new();
-        let points = Dispatch::<Points>::new();
-        let f = board.reduce_callback(move |board| {
-            points.reduce(|points| points.sub(upgrade.cost));
-            // board.upgrade(action);
-            upgrade.f.emit(());
-            board
+        let f = Callback::once( move |_| { 
+            upgrade.run()
         });
+        let upgrade = self.props.upgrade.clone();
 
-        let text = format!("{} (Cost: {})", upgrade.text, upgrade.cost);
+        let text = format!("{} (Cost: {})", upgrade.text, upgrade.cost.get());
 
         if self.visible() && self.clickable() {
             html! { <button class={style} onclick={f}>{text}</button> }
