@@ -1,4 +1,3 @@
-
 use yew::prelude::*;
 use yewdux::prelude::*;
 
@@ -9,67 +8,72 @@ use std::rc::Rc;
 
 pub enum Msg {
     UpdatePoints(Rc<Points>),
-    UpdateUpgrades(Rc<Upgrades>)
-
+    UpdateUpgrades(Rc<Upgrades>),
 }
 pub struct SideBar {
     points: Dispatch<Points>,
-    upgrades: Dispatch<Upgrades>
-
+    upgrades: Dispatch<Upgrades>,
 }
 
 use crate::upgrade_button::*;
+
+#[function_component(ShowPoints)]
+pub fn points() -> html {
+    let (points, _) = use_store::<Points>();
+
+    html! {
+    <div>
+    {format!("You have {} points", points)} <br/>
+    </div>
+    }
+}
+
+// #[function_component(Bar)]
+// pub fn bar() -> html {}
 
 impl Component for SideBar {
     type Message = Msg;
     type Properties = ();
     fn create(ctx: &Context<Self>) -> Self {
         let _parent = ctx.link().get_parent().unwrap();
-        // let parent_link = parent.clone().downcast::<Model>();
         let callback = ctx.link().callback(Msg::UpdatePoints);
         let points = Dispatch::<Points>::subscribe(callback);
         let callback = ctx.link().callback(Msg::UpdateUpgrades);
         let upgrades = Dispatch::<Upgrades>::subscribe(callback);
-        Self {points, upgrades}
+        Self { points, upgrades }
     }
 
     fn update(&mut self, _ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
             Msg::UpdatePoints(_points) => {
                 // log::info!("Got {:?}", points);
-
             }
             Msg::UpdateUpgrades(_upgrades) => {
-                // log::info!("Got new upgrades"); 
-
+                // log::info!("Got new upgrades");
             }
-
         }
-        true
+        false 
     }
     fn changed(&mut self, _ctx: &Context<Self>) -> bool {
         true
     }
     fn view(&self, _ctx: &Context<Self>) -> Html {
-
-
         let upgrades = self.upgrades.get();
         let points = self.points.get();
-        let buttons : Html = upgrades.upgrades.iter().map(|upgrade| {
-            html!{
-                <>
-                <UpgradeButton points={points.points} upgrade={upgrade.clone()}/> <br/>
-                </>
-            }
-        }).collect();
+        let buttons: Html = upgrades
+            .upgrades
+            .iter()
+            .map(|upgrade| {
+                html! {
+                    <> <UpgradeButton {upgrade}/> <br/> </>
+                }
+            })
+            .collect();
 
         html! {
-            <div class={classes!("float-right", "w-2/6")} > 
-            {format!("You have {} points", points.points)} <br/>
+            <div class={classes!("float-right", "w-2/6")} >
+            <ShowPoints/>
             {buttons}
-                // <UpgradeButton props={x_button}/>
-            // <button class={button.clone()} onclick={x}>{"Extend x"}</button>
-            // <button class={button} onclick={y}>{"Extend y"}</button>
             </div>
         }
     }

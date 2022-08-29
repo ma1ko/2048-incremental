@@ -1,5 +1,7 @@
 use crate::model::UpgradeableBoard;
 use gloo::timers::callback::Interval;
+use std::fmt::Display;
+use std::ops::Deref;
 use std::{collections::HashMap, time::Duration};
 use yewdux::prelude::*;
 pub fn get_upgrades() -> Vec<Rc<Upgrade>> {
@@ -93,6 +95,18 @@ use serde::Serialize;
 #[derive(Default, PartialEq, Eq, Clone, Debug, Deserialize, Serialize)]
 pub struct Points {
     pub points: usize,
+}
+impl Deref for Points {
+    type Target = usize;
+    fn deref(&self) -> &Self::Target {
+        &self.points
+    }
+}
+impl Display for Points {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.points)
+    }
+
 }
 
 impl Points {
