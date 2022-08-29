@@ -1,3 +1,7 @@
+fn main() {
+
+}
+/*
 use std::{rc::{Rc, Weak}, cell::RefCell, mem::MaybeUninit};
 
 
@@ -60,3 +64,4 @@ enum Color {
     Yellow,
     Orange // ?
 }
+*/

@@ -3,6 +3,7 @@ use std::fmt::Display;
 use crate::maze::Direction::*;
 use crate::maze::*;
 use rand::Rng;
+use serde::{Serialize, Deserialize};
 #[cfg(target_arch = "x86_64")]
 use termion::raw::IntoRawMode;
 struct Cleanup {}
@@ -47,10 +48,30 @@ pub fn main() {
         let key = term.read_key().unwrap();
         let direction: Direction = key.into();
         let won = board.play(direction);
-        if won { break }
+        if won {
+            break;
+        }
     }
 }
 impl Board<Field> {
+    pub fn random_empty_replace(&mut self, new_field: Field) {
+        // Timeout in case we're full
+        for _ in 0..10 {
+            let mut rng = rand::thread_rng();
+            let point = Point(rng.gen_range(0..self.max.0), rng.gen_range(0..self.max.1));
+            if let Some(field) = self.board.get(&point) {
+                if field.value.is_none() { 
+                    self.board.insert(point, new_field);
+                    return;
+                }
+            }
+        }
+    }
+    pub fn play_random(&mut self) -> bool {
+        let mut rng = rand::thread_rng();
+        let dir: Direction = rng.gen_range(0..4).into();
+        self.play(dir)
+    }
     pub fn play(&mut self, direction: Direction) -> bool {
         let mut any_change = false;
         loop {
@@ -59,7 +80,7 @@ impl Board<Field> {
                 Left => iter_board(self.rows_mut_rev()),
                 Up => iter_board(self.columns_mut_rev()),
                 Down => iter_board(self.columns_mut()),
-                Nowhere => continue,
+                Nowhere => return false,
             };
             any_change = any_change || change;
             if !change {
@@ -101,7 +122,7 @@ impl Board<Field> {
 
 //}
 
-#[derive(Eq, PartialEq, Clone, Copy)]
+#[derive(Eq, PartialEq, Clone, Copy, Serialize, Deserialize)]
 pub struct Field {
     pub value: Option<usize>,
 }

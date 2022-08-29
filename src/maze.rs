@@ -5,14 +5,13 @@ use std::{collections::HashMap, fmt::Display};
 use console::Key;
 use rand::Rng;
 fn main() {
-    let max = Point(50,20);
+    let max = Point(50, 20);
     let mut board: Board<Field> = Board::new(max);
     for i in 0..max.0 {
         for j in 0..max.1 {
             board.board.insert(Point(i, j), Field::new(Point(i, j)));
         }
     }
-
 
     board.aldous_broder();
     println!("{}", board);
@@ -24,7 +23,41 @@ fn main() {
     println!("{}", board);
 }
 
+impl Serialize for Point{
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: serde::Serializer {
+        serializer.serialize_str(&format!("{},{}", self.0, self.1))
+    }
+}
+use serde::de::{self, Visitor};
+struct PointVisitor;
+use std::fmt;
+impl<'de> Visitor<'de> for PointVisitor {
+    type Value = (usize, usize);
+
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        formatter.write_str("it crashed!!!")
+    }
+    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+        where
+            E: de::Error, {
+           let (x,y) = v.split_once(',').unwrap();
+                Ok((x.parse::<usize>().unwrap(), y.parse::<usize>().unwrap()))
+
+    }
+}
+impl<'de> Deserialize<'de> for Point {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where
+            D: serde::Deserializer<'de> {
+        let res = deserializer.deserialize_str(PointVisitor)?;
+        Ok(Point(res.0, res.1))
+    }
+
+}
 #[derive(PartialEq, Eq, Debug, Hash, Copy, Clone)]
+// #[serde_as(as = "(_,_)")]
 pub struct Point(pub usize, pub usize);
 
 impl Point {
@@ -51,6 +84,9 @@ impl Point {
     }
 }
 
+use serde::{Deserialize, Serialize};
+// use serde_with::serde_as;
+#[derive(PartialEq, Eq, Deserialize, Serialize)]
 pub struct Board<T> {
     pub board: HashMap<Point, T>,
     pub max: Point,
@@ -306,7 +342,6 @@ impl<'a, T: 'a> Iterator for BoardIterMut<'a, T> {
         None
     }
 }
-
 
 use Direction::*;
 #[derive(Hash, PartialEq, Eq, Clone, Copy)]
