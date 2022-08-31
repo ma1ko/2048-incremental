@@ -16,7 +16,7 @@ log = "0.4.17"
 web-sys = "0.3.59"
 wasm-bindgen = "0.2.82"
 yewdux = "0.8.1"
-serde = {version = "1.0.144", features = ["derive"]}
+serde = {version = "1.0.144", features = ["derive", "rc"]}
 gloo = "0.8.0"
 [target.'cfg(target_arch = "x86_64")'.dependencies]
 termion = "1.5.6"

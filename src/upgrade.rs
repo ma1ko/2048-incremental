@@ -2,107 +2,136 @@ use crate::model::UpgradeableBoard;
 use gloo::timers::callback::Interval;
 use std::fmt::Display;
 use std::ops::Deref;
-use std::{collections::HashMap, time::Duration};
 use yewdux::prelude::*;
+
+#[derive(Clone, PartialEq, Eq, Copy, Serialize, Deserialize)]
+pub enum UpgradeCosts {
+    CostsDouble,
+    CostsOnetime,
+    CostsStatic,
+}
+use UpgradeCosts::*;
+#[derive(Clone, PartialEq, Eq, Copy, Serialize, Deserialize)]
+pub enum UpgradeType {
+    ExtendX,
+    ExtendY,
+    EnableAutomove,
+    UpgradeAutomove,
+    EnableRandomPlace,
+    UpgradeRandomPlace,
+    Reset,
+    Harvest,
+}
+use UpgradeType::*;
+
+// impl Into<&'static dyn Fn()> for UpgradeType {
+//     fn into(self) -> &'static dyn Fn() {
+//         match self {
+//             ExtendX => &extend_x,
+//             _ => panic!(),
+//         }
+//     }
+// }
+impl From<UpgradeType> for Box<dyn Fn()> {
+    fn from(u: UpgradeType) -> Self {
+        let f: &'static dyn Fn() = match u {
+            ExtendX => &extend_x,
+            ExtendY => &extend_y,
+            EnableAutomove => &enable_automove,
+            EnableRandomPlace => &enable_random_place,
+            UpgradeAutomove => &upgrade_automove,
+            UpgradeRandomPlace => &upgrade_random_place,
+            Reset => &reset,
+            Harvest => &harvest,
+        };
+        Box::new(f)
+    }
+}
+
 pub fn get_upgrades() -> Vec<Rc<Upgrade>> {
     let upgrades = Vec::from([
-        Upgrade::new(20, 10, "Extend in X direction", &extend_x, &costs_double),
-        Upgrade::new(256, 100, "Extend in Y direction", &extend_y, &costs_double),
-        Upgrade::new(64, 32, "Enable Automove", &enable_automove, &costs_onetime),
-        Upgrade::new(
-            512,
-            256,
-            "Upgrade Automove",
-            &upgrade_automove,
-            &costs_double,
-        ),
-        Upgrade::new(0, 0, "Harvest", &harvest, &costs_static),
+        Upgrade::new(20, 10, "Extend in X direction", ExtendX, CostsDouble),
+        Upgrade::new(256, 100, "Extend in Y direction", ExtendY, CostsDouble),
+        Upgrade::new(64, 32, "Enable Automove", EnableAutomove, CostsOnetime),
+        Upgrade::new(512, 256, "Upgrade Automove", UpgradeAutomove, CostsDouble),
+        Upgrade::new(0, 0, "Harvest", Harvest, CostsStatic),
         Upgrade::new(
             16,
             8,
             "Place a 4 regularly",
-            &enable_random_place,
-            &costs_onetime,
+            EnableRandomPlace,
+            CostsOnetime,
         ),
         Upgrade::new(
             64,
             32,
             "Upgrade Place a 4 regularly",
-            &upgrade_random_place,
-            &costs_double,
+            UpgradeRandomPlace,
+            CostsDouble,
         ),
-        Upgrade::new(0, 0, "HARD RESET", &reset, &costs_static),
+        Upgrade::new(0, 0, "HARD RESET", Reset, CostsStatic),
     ]);
     upgrades.into_iter().map(|x| Rc::new(x)).collect()
 }
-fn costs_double(upgrade: &Upgrade) {
-    upgrade.cost.set(upgrade.cost.get() * 2);
-    upgrade.show_at.set(upgrade.cost.get() * 2);
-}
-fn costs_static(_upgrade: &Upgrade) {}
-fn costs_onetime(upgrade: &Upgrade) {
-    upgrade.cost.set(usize::MAX);
-    upgrade.show_at.set(usize::MAX);
-}
 
-fn extend_x() -> Callback<()> {
+fn extend_x() {
     let board = Dispatch::<UpgradeableBoard>::new();
-    board.reduce_callback(|board| {
+    board.reduce(|board| {
         board.extend_x();
         board
     })
 }
-fn extend_y() -> Callback<()> {
+fn extend_y() {
     let board = Dispatch::<UpgradeableBoard>::new();
-    board.reduce_callback(|board| {
+    board.reduce(|board| {
         board.extend_y();
         board
     })
 }
 
-fn enable_automove() -> Callback<()> {
+fn enable_automove() {
     let actions = Dispatch::<AutoActions>::new();
-    actions.reduce_callback(|actions| {
+    actions.reduce(|actions| {
         actions.automove.borrow_mut().enable();
         actions
     })
 }
-fn upgrade_automove() -> Callback<()> {
+fn upgrade_automove() {
     let actions = Dispatch::<AutoActions>::new();
-    actions.reduce_callback(|actions| {
+    actions.reduce(|actions| {
         actions.automove();
         actions
     })
 }
-fn harvest() -> Callback<()> {
+fn harvest() {
     let board = Dispatch::<UpgradeableBoard>::new();
-    board.reduce_callback(|board| {
+    board.reduce(|board| {
         board.harvest();
         board
     })
 }
-fn enable_random_place() -> Callback<()> {
+fn enable_random_place() {
     let actions = Dispatch::<AutoActions>::new();
-    actions.reduce_callback(|actions| {
+    actions.reduce(|actions| {
         actions.random_place.borrow_mut().enable();
         actions
     })
 }
-fn upgrade_random_place() -> Callback<()> {
+fn upgrade_random_place() {
     let actions = Dispatch::<AutoActions>::new();
-    actions.reduce_callback(|actions| {
+    actions.reduce(|actions| {
         actions.random_place();
         actions
     })
 }
-fn reset() -> Callback<()> {
+fn reset() {
     log::info!("Reseting game!");
-    Callback::once(|_| {
-        Dispatch::<Points>::new().set(Default::default());
-        Dispatch::<UpgradeableBoard>::new().set(Default::default());
-        Dispatch::<AutoActions>::new().set(Default::default());
-        Dispatch::<Upgrades>::new().set(Default::default());
-    })
+    // Callback::once(|_| {
+    Dispatch::<Points>::new().set(Default::default());
+    Dispatch::<UpgradeableBoard>::new().set(Default::default());
+    Dispatch::<AutoActions>::new().set(Default::default());
+    Dispatch::<Upgrades>::new().set(Default::default());
+    // })
 }
 
 use serde::Deserialize;
@@ -150,10 +179,8 @@ impl Store for Points {
     }
 }
 
-use yew::{callback, Callback, Properties};
-
 use std::rc::Rc;
-#[derive(PartialEq, Eq, Clone)]
+#[derive(PartialEq, Eq, Clone, Serialize, Deserialize)]
 pub struct Upgrades {
     pub upgrades: Vec<Rc<Upgrade>>,
 }
@@ -162,33 +189,33 @@ impl Store for Upgrades {
         self != old
     }
     fn new() -> Self {
-        Default::default()
+        storage::load(storage::Area::Local)
+            .expect("Unable to load state")
+            .unwrap_or_default()
     }
 }
 impl Default for Upgrades {
     fn default() -> Self {
         Upgrades {
             upgrades: get_upgrades(),
-        
+        }
     }
-}
-
 }
 
 impl PartialEq for Upgrade {
     fn eq(&self, other: &Self) -> bool {
-        self.text.eq(other.text)
+        self.text.eq(&other.text)
     }
 }
 use std::cell::Cell;
-// #[derive(Clone)]
+#[derive(Serialize, Deserialize)]
 pub struct Upgrade {
-    visible: Cell<bool>,
+    pub visible: Cell<bool>,
     pub cost: Cell<usize>,
     pub show_at: Cell<usize>,
-    pub text: &'static str,
-    pub f: Callback<()>,
-    pub cost_change_fn: &'static dyn Fn(&Self),
+    pub text: String,
+    pub action: UpgradeType,
+    pub costs: UpgradeCosts,
 }
 impl Eq for Upgrade {}
 impl Upgrade {
@@ -211,30 +238,44 @@ impl Upgrade {
         let points = Dispatch::<Points>::new();
         points.reduce(|points| points.sub(self.cost.get()));
         // change costs for next update level
-        (self.cost_change_fn)(&self);
+        match self.costs {
+            CostsStatic => self.costs_static(),
+            CostsDouble => self.costs_double(),
+            CostsOnetime => self.costs_onetime(),
+        }
         // check if it should be remain visible
         self.visible.set(false);
         self.visible(points.get().points);
 
         // run whatever the upgrade is supposed to do
-        self.f.emit(());
+        let action: Box<dyn Fn()> = Box::from(self.action);
+        action();
     }
 
     fn new(
         cost: usize,
         show_at: usize,
         text: &'static str,
-        f: &'static dyn Fn() -> Callback<()>,
-        cost_change_fn: &'static dyn Fn(&Self),
+        action: UpgradeType,
+        costs: UpgradeCosts,
     ) -> Self {
         Self {
             visible: Cell::new(false),
             cost: Cell::new(cost),
             show_at: Cell::new(show_at),
-            text,
-            f: f(),
-            cost_change_fn,
+            text: text.to_string(),
+            action,
+            costs,
         }
+    }
+    fn costs_double(&self) {
+        self.cost.set(self.cost.get() * 2);
+        self.show_at.set(self.show_at.get() * 2);
+    }
+    fn costs_static(&self) {}
+    fn costs_onetime(&self) {
+        self.cost.set(usize::MAX);
+        self.show_at.set(usize::MAX);
     }
 }
 fn do_automove() {
@@ -259,6 +300,9 @@ fn do_save() {
     let dispatch = Dispatch::<UpgradeableBoard>::new();
     storage::save(dispatch.get().as_ref(), Local).unwrap();
     let dispatch = Dispatch::<AutoActions>::new();
+    storage::save(dispatch.get().as_ref(), Local).unwrap();
+
+    let dispatch = Dispatch::<Upgrades>::new();
     storage::save(dispatch.get().as_ref(), Local).unwrap();
 }
 
