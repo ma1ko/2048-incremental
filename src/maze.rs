@@ -5,11 +5,11 @@ use std::{collections::HashMap, fmt::Display};
 use console::Key;
 use rand::Rng;
 fn main() {
-    let max = Point(50, 20);
+    let max = Point::new(50, 20);
     let mut board: Board<Field> = Board::new(max);
-    for i in 0..max.0 {
-        for j in 0..max.1 {
-            board.board.insert(Point(i, j), Field::new(Point(i, j)));
+    for i in 0..max.x {
+        for j in 0..max.y {
+            board.board.insert(Point::new(i, j), Field::new(Point::new(i, j)));
         }
     }
 
@@ -17,7 +17,7 @@ fn main() {
     println!("{}", board);
 
     let mut rng = rand::thread_rng();
-    let p = Point(rng.gen_range(0..10), rng.gen_range(0..10));
+    let p = Point::new(rng.gen_range(0..10), rng.gen_range(0..10));
     board.visit(p, 0);
     println!("{}", board.longest_path);
     println!("{}", board);
@@ -27,10 +27,11 @@ impl Serialize for Point{
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
         where
             S: serde::Serializer {
-        serializer.serialize_str(&format!("{},{}", self.0, self.1))
+        serializer.serialize_str(&format!("{},{}", self.x, self.y))
     }
 }
 use serde::de::{self, Visitor};
+use yew::Properties;
 struct PointVisitor;
 use std::fmt;
 impl<'de> Visitor<'de> for PointVisitor {
@@ -52,26 +53,34 @@ impl<'de> Deserialize<'de> for Point {
         where
             D: serde::Deserializer<'de> {
         let res = deserializer.deserialize_str(PointVisitor)?;
-        Ok(Point(res.0, res.1))
+        Ok(Point{x: res.0, y: res.1})
     }
 
 }
-#[derive(PartialEq, Eq, Debug, Hash, Copy, Clone)]
-// #[serde_as(as = "(_,_)")]
-pub struct Point(pub usize, pub usize);
+#[derive(PartialEq, Eq, Debug, Hash, Copy, Clone, Properties)]
+pub struct Point{pub x: usize, pub y: usize}
 
 impl Point {
+    pub fn random(max_x: usize, max_y: usize) -> Point {
+        let mut rng = rand::thread_rng();
+        Point::new(rng.gen_range(0..max_x), rng.gen_range(0..max_y))
+
+    }
+    pub fn new(x: usize, y: usize) -> Point {
+        Point {x,y}
+
+    }
     pub fn right(self) -> Self {
-        Point(self.0 + 1, self.1)
+        Point::new(self.x + 1, self.y)
     }
     pub fn left(self) -> Self {
-        Point(self.0.wrapping_sub(1), self.1)
+        Point::new(self.x.wrapping_sub(1), self.y)
     }
     pub fn down(self) -> Self {
-        Point(self.0, self.1 + 1)
+        Point::new(self.x, self.y + 1)
     }
     pub fn up(self) -> Self {
-        Point(self.0, self.1.wrapping_sub(1))
+        Point::new(self.x, self.y.wrapping_sub(1))
     }
     pub fn go(self, d: Direction) -> Self {
         match d {
@@ -123,7 +132,7 @@ impl Board<Field> {
     pub fn aldous_broder(&mut self) {
         let mut rng = rand::thread_rng();
         let mut left = self.iter().count();
-        let mut p = Point(rng.gen_range(0..10), rng.gen_range(0..10));
+        let mut p = Point::new(rng.gen_range(0..10), rng.gen_range(0..10));
         let mut current = self.board.remove(&p).unwrap();
 
         while left > 0 {
@@ -182,35 +191,53 @@ impl<T: 'static> Board<T> {
     pub fn insert(&mut self, point: Point, v: T) {
         self.board.insert(point, v);
     }
+    pub fn points(&self) -> impl Iterator<Item=Point> + '_ {
+        let mut p = Point::new(0,0);
+        let f = std::iter::from_fn(move || { 
+            let ret = p;
+            if self.board.get(&ret).is_some() { p = p.right(); return Some(ret) }
+            if self.board.get(&Point::new(0, p.y + 1)).is_some() {
+                let ret = Point::new(0, p.y + 1);
+                p = ret.right();
+                Some(ret)
+            } else {
+                None
+            }
+        });
+        f
+        // unimplemented!()
+        // BoardIter::new(self, Box::new(f), Point::new(0, 0))
+
+    }
     pub fn iter(&self) -> BoardIter<'_, T> {
         let f = |p: Point, board: &Board<T>| {
             if board.get(&p.right()).is_some() {
                 p.right()
-            } else if board.get(&Point(0, p.1 + 1)).is_some() {
-                return Point(0, p.1 + 1);
+            } else if board.get(&Point::new(0, p.y + 1)).is_some() {
+                return Point::new(0, p.y + 1);
             } else {
                 p.right()
             }
         };
-        BoardIter::new(self, Box::new(f), Point(0, 0))
+        BoardIter::new(self, Box::new(f), Point::new(0, 0))
     }
     pub fn iter_mut(&mut self) -> BoardIterMut<'_, T> {
         let f = |p: Point, board: &Board<T>| {
             if board.get(&p.right()).is_some() {
                 p.right()
-            } else if board.get(&Point(0, p.1 + 1)).is_some() {
-                return Point(0, p.1 + 1);
+            } else if board.get(&Point::new(0, p.y + 1)).is_some() {
+                return Point::new(0, p.y + 1);
             } else {
                 p.right()
             }
         };
-        BoardIterMut::new(self, Box::new(f), Point(0, 0))
+        BoardIterMut::new(self, Box::new(f), Point::new(0, 0))
     }
     pub fn rows(&self) -> std::vec::IntoIter<BoardIter<'_, T>> {
         let mut rows = Vec::new();
         let mut y = 0;
-        while let Some(_) = self.board.get(&Point(0, y)) {
-            let iter = BoardIter::new(self, Box::new(|p, _| p.right()), Point(0, y));
+        while let Some(_) = self.board.get(&Point::new(0, y)) {
+            let iter = BoardIter::new(self, Box::new(|p, _| p.right()), Point::new(0, y));
             rows.push(iter);
             y += 1;
         }
@@ -221,9 +248,9 @@ impl<T: 'static> Board<T> {
         let mut y = 0;
         let me = self as *mut Self;
 
-        while let Some(_) = self.board.get(&Point(0, y)) {
+        while let Some(_) = self.board.get(&Point::new(0, y)) {
             let me = unsafe { &mut *me };
-            let iter = BoardIterMut::new(me, Box::new(|p, _| p.right()), Point(0, y));
+            let iter = BoardIterMut::new(me, Box::new(|p, _| p.right()), Point::new(0, y));
             rows.push(iter);
             y += 1;
         }
@@ -233,9 +260,9 @@ impl<T: 'static> Board<T> {
         let mut rows = Vec::new();
         let mut y = 0;
         let me = self as *mut Self;
-        while let Some(_) = self.board.get(&Point(0, y)) {
+        while let Some(_) = self.board.get(&Point::new(0, y)) {
             let me = unsafe { &mut *me };
-            let iter = BoardIterMut::new(me, Box::new(|p, _| p.left()), Point(self.max.0 - 1, y));
+            let iter = BoardIterMut::new(me, Box::new(|p, _| p.left()), Point::new(self.max.x - 1, y));
             rows.push(iter);
             y += 1;
         }
@@ -245,8 +272,8 @@ impl<T: 'static> Board<T> {
         let mut rows = Vec::new();
         let mut x = 0;
 
-        while let Some(_) = self.board.get(&Point(x, 0)) {
-            let iter = BoardIter::new(self, Box::new(|p, _| p.down()), Point(x, 0));
+        while let Some(_) = self.board.get(&Point::new(x, 0)) {
+            let iter = BoardIter::new(self, Box::new(|p, _| p.down()), Point::new(x, 0));
             rows.push(iter);
             x += 1;
         }
@@ -257,9 +284,9 @@ impl<T: 'static> Board<T> {
         let mut x = 0;
         let me = self as *mut Self;
 
-        while let Some(_) = self.board.get(&Point(x, 0)) {
+        while let Some(_) = self.board.get(&Point::new(x, 0)) {
             let me = unsafe { &mut *me };
-            let iter = BoardIterMut::new(me, Box::new(|p, _| p.down()), Point(x, 0));
+            let iter = BoardIterMut::new(me, Box::new(|p, _| p.down()), Point::new(x, 0));
             columns.push(iter);
             x += 1;
         }
@@ -270,9 +297,9 @@ impl<T: 'static> Board<T> {
         let mut x = 0;
         let me = self as *mut Self;
 
-        while let Some(_) = self.board.get(&Point(x, 0)) {
+        while let Some(_) = self.board.get(&Point::new(x, 0)) {
             let me = unsafe { &mut *me };
-            let iter = BoardIterMut::new(me, Box::new(|p, _| p.up()), Point(x, self.max.1 - 1));
+            let iter = BoardIterMut::new(me, Box::new(|p, _| p.up()), Point::new(x, self.max.y - 1));
             columns.push(iter);
             x += 1;
         }

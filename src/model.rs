@@ -1,128 +1,104 @@
 use gloo::events::EventListener;
-use yew::prelude::*;
-use yewdux::prelude::Dispatch;
-use yewdux::prelude::Store;
 
 use crate::sidebar::SideBar;
 
-use gloo::timers::callback::Interval;
 // use twentyfourtyeight::Field;
 fn color(value: usize) -> &'static str {
     match value {
         0 => "bg-blue-50",
-        2 => "bg-blue-100",
-        4 => "bg-blue-400",
-        8 => "bg-blue-700",
-        16 => "bg-red-100",
-        32 => "bg-red-400",
-        64 => "bg-red-700",
-        128 => "bg-green-100",
-        256 => "bg-green-400",
-        512 => "bg-green-700",
-        _ => "",
+        1 => "bg-blue-100",
+        2 => "bg-blue-400",
+        3 => "bg-blue-700",
+        4 => "bg-red-100",
+        5 => "bg-red-400",
+        6 => "bg-red-700",
+        7 => "bg-green-100",
+        8 => "bg-green-400",
+        9 => "bg-green-700",
+        10 => "bg-black-100",
+        11 => "bg-black-400",
+        12 => "bg-black-700",
+        x => unimplemented!("Color for {}", x),
     }
 }
 
-struct YewField {
-    value: Option<usize>,
+#[function_component(YewField)]
+fn field(props: &Props) -> html {
+    let (board, _) = use_store::<UpgradeableBoard>();
+    let scientific_notation = board.scientific_notation.get();
+    let board = board.board.borrow();
+    let value = board.board.get(&props.index).unwrap().value;
+    let classes = classes!(
+        "text-red-900",
+        "text-center",
+        // "p-20",
+        "justify-center",
+        "flex",
+        "items-center",
+        "text-5xl",
+        color(value.unwrap_or(1))
+    );
+    let value = if let Some(value) = value {
+        if scientific_notation && value <= 1024 {
+            format!("2e{}", value)
+        } else {
+            (1 << value).to_string()
+        }
+    } else {
+        " ".to_string()
+    };
+
+    // classes.push("a");
+    html! {
+        <div class={classes}>{value}</div>
+    }
 }
 
 #[derive(PartialEq, Properties)]
 pub struct Props {
-    value: Option<usize>,
+    index: Point,
 }
-impl Component for YewField {
-    type Message = ();
-    type Properties = Props;
 
-    fn create(ctx: &Context<Self>) -> Self {
-        Self {
-            value: ctx.props().value,
-        }
-    }
-    fn view(&self, _ctx: &Context<Self>) -> Html {
-        let value = if let Some(value) = self.value {
-            value.to_string()
-        } else {
-            "".to_string()
-        };
-        let classes = classes!(
-            "text-red-900",
-            "text-center",
-            // "p-20",
-            "justify-center",
-            "flex",
-            "items-center",
-            "text-5xl",
-            color(self.value.unwrap_or(0))
-        );
-        // classes.push("a");
-        html! {
-            <div class={classes}>{value}</div>
-        }
-    }
-    // fn update(&mut self, _ctx: &Context<Self>, _msg: Self::Message) -> bool {
-    //     true
-    // }
-    fn changed(&mut self, ctx: &Context<Self>) -> bool {
-        if ctx.props().value != self.value {
-            self.value = ctx.props().value;
-            true
-        } else {
-            false
-        }
-    }
-}
 use crate::upgrade::*;
 #[derive(PartialEq, Eq)]
 pub enum Msg {
     Key(KeyboardEvent),
-    // Upgrade(&'static str),
-    // ExtendY(),
-    // ExtendX(),
-    // Harvest(),
-    // AutoClicker(),
     Move(),
     Board(Rc<UpgradeableBoard>),
 }
 
 use crate::maze::*;
 use crate::twentyfourtyeight::Field;
-use crate::upgrade::*;
-use std::cell::RefCell;
-use std::rc::Rc;
+use crate::*;
 
 impl Store for UpgradeableBoard {
     fn new() -> Self {
-    yewdux::storage::load(yewdux::storage::Area::Local)
+        yewdux::storage::load(yewdux::storage::Area::Local)
             .expect("Unable to load state")
             .unwrap_or_default()
-          }
+    }
     fn should_notify(&self, _old: &Self) -> bool {
         true
     }
 }
 
-
 impl Default for UpgradeableBoard {
     fn default() -> Self {
-          let max = Point(4, 4);
+        let max = Point::new(4, 4);
         let mut board: Board<Field> = Board::new(max);
-        for i in 0..max.0 {
-            for j in 0..max.1 {
-                board.insert(Point(i, j), Field::new(None));
+        for i in 0..max.x {
+            for j in 0..max.y {
+                board.insert(Point::new(i, j), Field::new(None));
             }
         }
-        board.insert(Point(0, 0), Field::new(Some(2)));
+        board.insert(Point::new(0, 0), Field::new(Some(1)));
         Self {
             board: RefCell::new(board),
+            scientific_notation: Cell::new(false),
             // clicker: RefCell::new(None),
         }
-
     }
-
 }
-
 
 impl PartialEq for UpgradeableBoard {
     fn eq(&self, other: &Self) -> bool {
@@ -130,29 +106,32 @@ impl PartialEq for UpgradeableBoard {
     }
 }
 impl Eq for UpgradeableBoard {}
-use serde::{Deserialize, Serialize};
 #[derive(Deserialize, Serialize)]
 pub struct UpgradeableBoard {
     board: RefCell<Board<Field>>,
+    scientific_notation: Cell<bool>,
 }
 
 impl UpgradeableBoard {
+    pub fn scientific_notation(&self) {
+        self.scientific_notation.set(true);
+    }
     pub fn extend_x(&self) {
         let board = &mut self.board.borrow_mut();
-        for i in 0..board.max.1 {
-            let point = Point(board.max.0, i);
+        for i in 0..board.max.y {
+            let point = Point::new(board.max.x, i);
             board.insert(point, Field::new(None));
         }
-        board.max.0 += 1;
+        board.max.x += 1;
     }
 
     pub fn extend_y(&self) {
         let board = &mut self.board.borrow_mut();
-        for i in 0..board.max.0 {
-            let point = Point(i, board.max.1);
+        for i in 0..board.max.x {
+            let point = Point::new(i, board.max.y);
             board.insert(point, Field::new(None));
         }
-        board.max.1 += 1;
+        board.max.y += 1;
     }
     pub fn harvest(&self) {
         let board = &mut self.board.borrow_mut();
@@ -163,11 +142,11 @@ impl UpgradeableBoard {
         if let Some((_, f)) = max {
             // let f: Field = self.board.board.remove(&p).unwrap();
             let value = f.value.unwrap_or(0);
-            log::info!("Found {}", value);
-            // self.points += f.value.unwrap_or(0);
             let dispatch = Dispatch::<Points>::new();
-            dispatch.reduce(|points| points.add(value) );
+            dispatch.reduce(|points| points.add(1 << value));
 
+            let dispatch = Dispatch::<Stats>::new();
+            dispatch.reduce_mut(|points| points.harvest(value));
             f.value = None;
         }
     }
@@ -178,21 +157,24 @@ impl UpgradeableBoard {
         self.board.borrow_mut().play(direction);
     }
     pub fn random_place(&self, number: usize) {
-        log::info!("Random placing");
         let mut board = self.board.borrow_mut();
         let field = Field::new(Some(number));
         board.random_empty_replace(field);
-
-
-
     }
-
 }
+
+#[function_component(Main)]
+fn ui() -> html {
+    html! {}
+}
+
 pub struct Model {
     board: Dispatch<UpgradeableBoard>,
     _link: yew::html::Scope<Self>,
     _listener: EventListener,
 }
+
+fn handle_keypress() {}
 
 impl Model {}
 
@@ -203,10 +185,7 @@ impl Component for Model {
     fn create(ctx: &Context<Self>) -> Self {
         // initiates saving state
         let save = Dispatch::<crate::upgrade::AutoActions>::new();
-        save.reduce(|action| {
-            action
-
-        });
+        save.reduce(|action| action);
 
         let window: web_sys::EventTarget = web_sys::window().unwrap().into();
         let cb = ctx.link().callback(|key| Msg::Key(key));
@@ -232,65 +211,55 @@ impl Component for Model {
                     38 | 87 => Direction::Up,
                     39 | 68 => Direction::Right,
                     40 | 83 => Direction::Down,
-                    _ => {
-                        /*log::info!("Code {}", x);*/
-                        Direction::Nowhere
-                    }
+                    _ => Direction::Nowhere,
                 };
-                // self.board.get().play(direction);
-
                 self.board.reduce(|board| {
                     board.play(direction);
                     board
                 });
             }
-            //Msg::Upgrade(name) => {
-            //    // self.upgrade(name);
-            //    //TODO?
-            //}
 
-            // Msg::ExtendX() => self.extend_x(),
-            // Msg::ExtendY() => self.extend_y(),
-            // Msg::Harvest() => self.harvest(),
-            // Msg::AutoClicker() => self.autoclicker(),
             Msg::Move() => {
                 self.board.reduce(|board| {
                     board.mv();
                     board
                 });
             }
-            Msg::Board(_board) => { /* Board has changed, redraw it */} 
+            Msg::Board(_board) => { /* Board has changed, redraw it */ }
         };
         true
     }
 
     /* Grid classes for tailwindcss
      * grid-cols-4 grid-cols-5 grid-cols-6 grid-cols-7 grid-cols-8 grid-cols-9
+     * grid-rows-4 grid-rows-5 grid-rows-6 grid-rows-7 grid-rows-8 grid-rows-9
      */
 
     fn view(&self, _ctx: &Context<Self>) -> Html {
         // This gives us a component's "`Scope`" which allows us to send messages, etc to the component.
         let board = self.board.get();
+        let board = board.board.borrow();
         let html: Html = board
-            .board
-            .borrow()
-            .rows()
-            .map(|row| {
-                row.map(|field| {
-                    html! {<YewField value={field.value}/>}
-                })
+            .points()
+            .map(|index| {
+                html! {<YewField {index}/>}
             })
-            .flatten()
             .collect();
 
-
-        // let body = gloo_utils::body();
-        // body.add_event_listener_with_callback("keydown", link.callback(|key| Msg::Key(key)));
-        let cols = format!("grid-cols-{}", board.board.borrow().max.0);
-        let grid_class = classes!("float-left", "grid", cols, "gap-2", "h-screen", "w-4/6");
+        let cols = format!("grid-cols-{}", board.max.x);
+        let rows = format!("grid-rows-{}", board.max.y);
+        let grid_class = classes!(
+            "bg-black",
+            "float-left",
+            "grid",
+            "gap-2",
+            "h-screen",
+            "w-4/6",
+            cols,
+            rows
+        );
         html! {
             <body class={classes!("float-root", "h-full")}>
-                // onkeydown={link.callback(|key| Msg::Key(key))} tabindex=0 >
 
             <div class={grid_class}>
                 {html}

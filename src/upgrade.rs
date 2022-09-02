@@ -1,8 +1,8 @@
 use crate::model::UpgradeableBoard;
+use crate::*;
 use gloo::timers::callback::Interval;
 use std::fmt::Display;
 use std::ops::Deref;
-use yewdux::prelude::*;
 
 #[derive(Clone, PartialEq, Eq, Copy, Serialize, Deserialize)]
 pub enum UpgradeCosts {
@@ -17,44 +17,61 @@ pub enum UpgradeType {
     ExtendY,
     EnableAutomove,
     UpgradeAutomove,
+    EnableAutoHarvest,
+    UpgradeAutoHarvest,
     EnableRandomPlace,
     UpgradeRandomPlace,
     Reset,
     Harvest,
+    ScientificNotation,
+    EnableStatistics,
 }
 use UpgradeType::*;
 
-// impl Into<&'static dyn Fn()> for UpgradeType {
-//     fn into(self) -> &'static dyn Fn() {
-//         match self {
-//             ExtendX => &extend_x,
-//             _ => panic!(),
-//         }
-//     }
-// }
-impl From<UpgradeType> for Box<dyn Fn()> {
-    fn from(u: UpgradeType) -> Self {
-        let f: &'static dyn Fn() = match u {
-            ExtendX => &extend_x,
-            ExtendY => &extend_y,
-            EnableAutomove => &enable_automove,
-            EnableRandomPlace => &enable_random_place,
-            UpgradeAutomove => &upgrade_automove,
-            UpgradeRandomPlace => &upgrade_random_place,
-            Reset => &reset,
-            Harvest => &harvest,
-        };
-        Box::new(f)
+macro_rules! run {
+    ($a:ident, $b:ident) => {{
+        let dispatch = Dispatch::<$a>::new();
+        dispatch.reduce(|state| {
+            state.$b();
+            state
+        });
+    }};
+}
+impl UpgradeType {
+    fn run(&self) {
+        match self {
+            ExtendX => run!(UpgradeableBoard, extend_x),
+            ExtendY => run!(UpgradeableBoard, extend_y),
+            EnableAutomove => run!(AutoActions, enable_automove),
+            EnableRandomPlace => run!(AutoActions, enable_random_place),
+            UpgradeAutomove => run!(AutoActions, upgrade_automove),
+            UpgradeRandomPlace => run!(AutoActions, upgrade_random_place),
+            EnableAutoHarvest => run!(AutoActions, enable_autoharvest),
+            UpgradeAutoHarvest => run!(AutoActions, upgrade_autoharvest),
+            Reset => reset(),
+            Harvest => run!(UpgradeableBoard, harvest),
+            ScientificNotation => run!(UpgradeableBoard, scientific_notation),
+            EnableStatistics => enable_stats()
+        }
     }
 }
 
-pub fn get_upgrades() -> Vec<Rc<Upgrade>> {
-    let upgrades = Vec::from([
+pub fn get_upgrades() -> Vec<Upgrade> {
+    vec![
         Upgrade::new(20, 10, "Extend in X direction", ExtendX, CostsDouble),
         Upgrade::new(256, 100, "Extend in Y direction", ExtendY, CostsDouble),
         Upgrade::new(64, 32, "Enable Automove", EnableAutomove, CostsOnetime),
         Upgrade::new(512, 256, "Upgrade Automove", UpgradeAutomove, CostsDouble),
         Upgrade::new(0, 0, "Harvest", Harvest, CostsStatic),
+        // Upgrade::new(256, 256, "Enable Autoharvesting", EnableAutoHarvest, CostsOnetime),
+        // Upgrade::new(1024, 512, "Faster Autoharvesting", UpgradeAutoHarvest, CostsDouble),
+        Upgrade::new(
+            1000,
+            750,
+            "Scientific Notation",
+            ScientificNotation,
+            CostsOnetime,
+        ),
         Upgrade::new(
             16,
             8,
@@ -69,73 +86,23 @@ pub fn get_upgrades() -> Vec<Rc<Upgrade>> {
             UpgradeRandomPlace,
             CostsDouble,
         ),
+        Upgrade::new(1024, 512, "Statistics", EnableStatistics, CostsStatic),
         Upgrade::new(0, 0, "HARD RESET", Reset, CostsStatic),
-    ]);
-    upgrades.into_iter().map(|x| Rc::new(x)).collect()
+    ]
 }
 
-fn extend_x() {
-    let board = Dispatch::<UpgradeableBoard>::new();
-    board.reduce(|board| {
-        board.extend_x();
-        board
-    })
-}
-fn extend_y() {
-    let board = Dispatch::<UpgradeableBoard>::new();
-    board.reduce(|board| {
-        board.extend_y();
-        board
-    })
-}
-
-fn enable_automove() {
-    let actions = Dispatch::<AutoActions>::new();
-    actions.reduce(|actions| {
-        actions.automove.borrow_mut().enable();
-        actions
-    })
-}
-fn upgrade_automove() {
-    let actions = Dispatch::<AutoActions>::new();
-    actions.reduce(|actions| {
-        actions.automove();
-        actions
-    })
-}
-fn harvest() {
-    let board = Dispatch::<UpgradeableBoard>::new();
-    board.reduce(|board| {
-        board.harvest();
-        board
-    })
-}
-fn enable_random_place() {
-    let actions = Dispatch::<AutoActions>::new();
-    actions.reduce(|actions| {
-        actions.random_place.borrow_mut().enable();
-        actions
-    })
-}
-fn upgrade_random_place() {
-    let actions = Dispatch::<AutoActions>::new();
-    actions.reduce(|actions| {
-        actions.random_place();
-        actions
-    })
+fn enable_stats() {
+    Dispatch::<Stats>::new().reduce_mut(|stats| stats.enable());
 }
 fn reset() {
     log::info!("Reseting game!");
-    // Callback::once(|_| {
     Dispatch::<Points>::new().set(Default::default());
     Dispatch::<UpgradeableBoard>::new().set(Default::default());
     Dispatch::<AutoActions>::new().set(Default::default());
     Dispatch::<Upgrades>::new().set(Default::default());
-    // })
+    Dispatch::<Stats>::new().set(Default::default());
 }
 
-use serde::Deserialize;
-use serde::Serialize;
 #[derive(Default, PartialEq, Eq, Clone, Debug, Deserialize, Serialize)]
 pub struct Points {
     pub points: usize,
@@ -159,13 +126,13 @@ impl Points {
         }
     }
     pub fn add(&self, points: usize) -> Points {
-        log::info!("New Points: {}", self.points + points);
+        let stats = Dispatch::<Stats>::new();
+        stats.reduce_mut(|stats| stats.points(points));
         Points {
             points: self.points + points,
         }
     }
 }
-use yewdux::storage;
 impl Store for Points {
     fn new() -> Self {
         // yewdux::prelude::init_listener(storage::StorageListener::<Self>::new(storage::Area::Local));
@@ -179,16 +146,16 @@ impl Store for Points {
     }
 }
 
-use std::rc::Rc;
-#[derive(PartialEq, Eq, Clone, Serialize, Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub struct Upgrades {
-    pub upgrades: Vec<Rc<Upgrade>>,
+    pub upgrades: Vec<Upgrade>,
 }
 impl Store for Upgrades {
-    fn should_notify(&self, old: &Self) -> bool {
-        self != old
+    fn should_notify(&self, _old: &Self) -> bool {
+        true
     }
     fn new() -> Self {
+        log::info!("Loading");
         storage::load(storage::Area::Local)
             .expect("Unable to load state")
             .unwrap_or_default()
@@ -202,12 +169,6 @@ impl Default for Upgrades {
     }
 }
 
-impl PartialEq for Upgrade {
-    fn eq(&self, other: &Self) -> bool {
-        self.text.eq(&other.text)
-    }
-}
-use std::cell::Cell;
 #[derive(Serialize, Deserialize)]
 pub struct Upgrade {
     pub visible: Cell<bool>,
@@ -217,7 +178,7 @@ pub struct Upgrade {
     pub action: UpgradeType,
     pub costs: UpgradeCosts,
 }
-impl Eq for Upgrade {}
+// impl Eq for Upgrade {}
 impl Upgrade {
     pub fn visible(&self, points: usize) -> bool {
         // show upgrade at threshold, don't hide it again
@@ -248,8 +209,7 @@ impl Upgrade {
         self.visible(points.get().points);
 
         // run whatever the upgrade is supposed to do
-        let action: Box<dyn Fn()> = Box::from(self.action);
-        action();
+        self.action.run();
     }
 
     fn new(
@@ -285,41 +245,60 @@ fn do_automove() {
         board
     });
 }
+fn do_harvest() {
+    let dispatch = Dispatch::<UpgradeableBoard>::new();
+    dispatch.reduce(|board| {
+        board.harvest();
+        board
+    });
+}
 fn do_random_place() {
     let dispatch = Dispatch::<UpgradeableBoard>::new();
     dispatch.reduce(|board| {
-        board.random_place(4);
+        board.random_place(2);
         board
     });
 }
 use yewdux::storage::Area::Local;
-fn do_save() {
-    let dispatch = Dispatch::<Points>::new();
-    storage::save(dispatch.get().as_ref(), Local).unwrap();
-
-    let dispatch = Dispatch::<UpgradeableBoard>::new();
-    storage::save(dispatch.get().as_ref(), Local).unwrap();
-    let dispatch = Dispatch::<AutoActions>::new();
-    storage::save(dispatch.get().as_ref(), Local).unwrap();
-
-    let dispatch = Dispatch::<Upgrades>::new();
-    storage::save(dispatch.get().as_ref(), Local).unwrap();
+macro_rules! save {
+    ($a:ident) => {
+        let dispatch = Dispatch::<$a>::new();
+        storage::save(dispatch.get().as_ref(), Local).unwrap();
+    };
 }
 
-use std::cell::RefCell;
-
+fn do_save() {
+    save!(Upgrades);
+    save!(Points);
+    save!(UpgradeableBoard);
+    save!(AutoActions);
+    save!(Stats);
+}
 #[derive(Serialize, Deserialize)]
 pub struct AutoActions {
     automove: RefCell<AutoAction>,
+    autoharvest: RefCell<AutoAction>,
     random_place: RefCell<AutoAction>,
-    save: RefCell<AutoAction>,
+    autosave: RefCell<AutoAction>,
 }
 impl AutoActions {
-    fn automove(&self) {
+    fn upgrade_automove(&self) {
         self.automove.borrow_mut().upgrade(50);
     }
-    fn random_place(&self) {
+    fn enable_automove(&self) {
+        self.automove.borrow_mut().enable();
+    }
+    fn upgrade_random_place(&self) {
         self.random_place.borrow_mut().upgrade(50);
+    }
+    fn enable_random_place(&self) {
+        self.random_place.borrow_mut().enable();
+    }
+    fn upgrade_autoharvest(&self) {
+        self.random_place.borrow_mut().upgrade(50);
+    }
+    fn enable_autoharvest(&self) {
+        self.autoharvest.borrow_mut().enable();
     }
 }
 
@@ -327,10 +306,11 @@ impl Default for AutoActions {
     fn default() -> Self {
         let a = AutoActions {
             automove: RefCell::new(AutoAction::new(None, Action::AutoMove, 1000, false)),
+            autoharvest: RefCell::new(AutoAction::new(None, Action::AutoHarvest, 10000, false)),
             random_place: RefCell::new(AutoAction::new(None, Action::RandomPlace, 1000, false)),
-            save: RefCell::new(AutoAction::new(None, Action::Save, 5000, true)),
+            autosave: RefCell::new(AutoAction::new(None, Action::AutoSave, 5000, true)),
         };
-        a.save.borrow_mut().set_callback();
+        a.autosave.borrow_mut().set_callback();
         a
     }
 }
@@ -345,8 +325,9 @@ impl Store for AutoActions {
             .unwrap_or_default();
         //activate timers
         me.automove.borrow_mut().set_callback();
-        me.save.borrow_mut().set_callback();
+        me.autosave.borrow_mut().set_callback();
         me.random_place.borrow_mut().set_callback();
+        me.autoharvest.borrow_mut().set_callback();
         me
     }
 }
@@ -354,7 +335,8 @@ impl Store for AutoActions {
 enum Action {
     AutoMove,
     RandomPlace,
-    Save,
+    AutoSave,
+    AutoHarvest,
 }
 #[derive(Serialize, Deserialize)]
 struct AutoAction {
@@ -375,7 +357,7 @@ impl AutoAction {
         }
     }
     fn upgrade(&mut self, timediff: u32) {
-        assert!(self.active);
+        // assert!(self.active);
         self.time -= timediff;
         self.set_callback();
     }
@@ -389,8 +371,9 @@ impl AutoAction {
         }
         let f: &'static dyn Fn() = match self.action {
             Action::AutoMove => &do_automove,
-            Action::Save => &do_save,
+            Action::AutoSave => &do_save,
             Action::RandomPlace => &do_random_place,
+            Action::AutoHarvest => &do_harvest,
         };
 
         let dispatch = Dispatch::<UpgradeableBoard>::new();

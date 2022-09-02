@@ -28,18 +28,18 @@ fn iter_board(iter: std::vec::IntoIter<BoardIterMut<Field>>) -> bool {
     .fold(false, |state, x| x || state)
 }
 
-pub fn main() {
+pub fn _main() {
     let _ = Cleanup {};
     #[cfg(target_arch = "x86_64")]
     let _raw_term = std::io::stdout().into_raw_mode().unwrap();
-    let max = Point(4, 4);
+    let max = Point::new(4, 4);
     let mut board: Board<Field> = Board::new(max);
-    for i in 0..max.0 {
-        for j in 0..max.1 {
-            board.insert(Point(i, j), Field::new(None));
+    for i in 0..max.x {
+        for j in 0..max.y {
+            board.insert(Point::new(i, j), Field::new(None));
         }
     }
-    board.insert(Point(0, 0), Field::new(Some(2)));
+    board.insert(Point::new(0, 0), Field::new(Some(2)));
     println!("{}", board);
 
     let term = console::Term::stdout();
@@ -57,8 +57,7 @@ impl Board<Field> {
     pub fn random_empty_replace(&mut self, new_field: Field) {
         // Timeout in case we're full
         for _ in 0..10 {
-            let mut rng = rand::thread_rng();
-            let point = Point(rng.gen_range(0..self.max.0), rng.gen_range(0..self.max.1));
+            let point = Point::random(self.max.x, self.max.y);
             if let Some(field) = self.board.get(&point) {
                 if field.value.is_none() { 
                     self.board.insert(point, new_field);
@@ -96,31 +95,17 @@ impl Board<Field> {
             return true;
         }
         // spawn random 2
-        let mut rng = rand::thread_rng();
         loop {
-            let max = self.max;
-            let p = Point(rng.gen_range(0..max.0), rng.gen_range(0..max.1));
+            let p = Point::random(self.max.x, self.max.y);
             if self.board.get(&p).unwrap().value.is_none() {
-                self.board.insert(p, Field::new(Some(2)));
+                self.board.insert(p, Field::new(Some(1)));
                 break;
             }
         }
         return false;
     }
 }
-// impl Display for Board<Field> {
-//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-//         self.rows().try_for_each(|row| {
-//             writeln!(f, "")?;
-//             row.try_for_each(|field|{
-//                 write!(f, "{}", field)
 
-//             })
-
-//         })
-//     }
-
-//}
 
 #[derive(Eq, PartialEq, Clone, Copy, Serialize, Deserialize)]
 pub struct Field {
@@ -134,7 +119,7 @@ impl Field {
         if let Some(value) = &mut self.value {
             if let Some(other_value) = &other.value {
                 if value == other_value {
-                    *value = *value + *other_value;
+                    *value = *value + 1;
                     other.value = None;
                     true
                 } else {
