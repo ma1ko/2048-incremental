@@ -18,7 +18,10 @@ fn color(value: usize) -> &'static str {
         10 => "bg-black-100",
         11 => "bg-black-400",
         12 => "bg-black-700",
-        x => unimplemented!("Color for {}", x),
+        13 => "bg-yellow-100",
+        14 => "bg-yellow-400",
+        15 => "bg-yellow-700",
+        _ => "",
     }
 }
 
@@ -36,7 +39,7 @@ fn field(props: &Props) -> html {
         "flex",
         "items-center",
         "text-5xl",
-        color(value.unwrap_or(1))
+        color(value.unwrap_or(0))
     );
     let value = if let Some(value) = value {
         if scientific_notation && value <= 1024 {
@@ -63,7 +66,6 @@ use crate::upgrade::*;
 #[derive(PartialEq, Eq)]
 pub enum Msg {
     Key(KeyboardEvent),
-    Move(),
     Board(Rc<UpgradeableBoard>),
 }
 
@@ -174,7 +176,7 @@ pub struct Model {
     _listener: EventListener,
 }
 
-fn handle_keypress() {}
+// fn handle_keypress() {}
 
 impl Model {}
 
@@ -215,13 +217,6 @@ impl Component for Model {
                 };
                 self.board.reduce(|board| {
                     board.play(direction);
-                    board
-                });
-            }
-
-            Msg::Move() => {
-                self.board.reduce(|board| {
-                    board.mv();
                     board
                 });
             }

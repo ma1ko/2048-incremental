@@ -4,6 +4,22 @@ use gloo::timers::callback::Interval;
 use std::fmt::Display;
 use std::ops::Deref;
 
+macro_rules! run {
+    ($a:ident, $b:ident) => {{
+        let dispatch = Dispatch::<$a>::new();
+        dispatch.reduce(|state| {
+            state.$b();
+            state
+        })
+    }};
+}
+macro_rules! attr {
+    ($a:ident, $b:ident) => {{
+        let dispatch = Dispatch::<$a>::new().get();
+        dispatch.$b
+    }};
+}
+
 #[derive(Clone, PartialEq, Eq, Copy, Serialize, Deserialize)]
 pub enum UpgradeCosts {
     CostsDouble,
@@ -26,19 +42,26 @@ pub enum UpgradeType {
     ScientificNotation,
     EnableStatistics,
 }
-use UpgradeType::*;
-
-macro_rules! run {
-    ($a:ident, $b:ident) => {{
-        let dispatch = Dispatch::<$a>::new();
-        dispatch.reduce(|state| {
-            state.$b();
-            state
-        });
-    }};
-}
 impl UpgradeType {
+    pub fn text(&self) -> &'static str {
+        use UpgradeType::*;
+        match self {
+            ExtendX => "Extend Board in X direction",
+            ExtendY => "Extend Board in Y direction",
+            EnableAutomove => "Automatically move the board",
+            EnableRandomPlace => "Place a 4 randomly",
+            UpgradeRandomPlace => "Place 4 faster",
+            EnableAutoHarvest => "Harvest largest number regularly",
+            UpgradeAutoHarvest => "Harvest faster",
+            UpgradeAutomove => "Move faster",
+            Reset => "HARD RESET",
+            Harvest => "Harvest largest Number",
+            ScientificNotation => "Enable log notation for large numbers",
+            EnableStatistics => "Show statistics tab",
+        }
+    }
     fn run(&self) {
+        use UpgradeType::*;
         match self {
             ExtendX => run!(UpgradeableBoard, extend_x),
             ExtendY => run!(UpgradeableBoard, extend_y),
@@ -51,43 +74,69 @@ impl UpgradeType {
             Reset => reset(),
             Harvest => run!(UpgradeableBoard, harvest),
             ScientificNotation => run!(UpgradeableBoard, scientific_notation),
-            EnableStatistics => enable_stats()
+            EnableStatistics => enable_stats(),
         }
+    }
+}
+#[derive(Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Condition {
+    HavePoints(usize),
+    Harvest(usize),
+    BoardSize(usize, usize),
+    No(),
+}
+impl Condition {
+    pub fn check(&self) -> bool {
+        use Condition::*;
+        match self {
+            HavePoints(p) => attr!(Points, points) >= *p,
+            Harvest(p) => attr!(Stats, largest_harvest) >= *p,
+            BoardSize(_, _) => unimplemented!(),
+            No() => true,
+        }
+    }
+    pub fn fulfilled(&self) {
+        use Condition::*;
+        match self {
+            HavePoints(p) => Dispatch::<Points>::new().reduce(|points| points.sub(*p)),
+            Harvest(_) => {}
+            BoardSize(_, _) => {}
+            No() => {}
+        }
+    }
+}
+impl Display for Condition {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use Condition::*;
+        match self {
+            HavePoints(p) => write!(f,"Requires {} points", p),
+            Harvest(p) => write!(f,"Harvest a block of at least {} points", p),
+            BoardSize(x,y) => write!(f,"Board must by at least {}x{}", x,y),
+            No() => write!(f,"Free")
+        }
+    }
+}
+impl From<usize> for Condition {
+    fn from(points: usize) -> Self {
+        Condition::HavePoints(points)
     }
 }
 
 pub fn get_upgrades() -> Vec<Upgrade> {
+    use UpgradeType::*;
     vec![
-        Upgrade::new(20, 10, "Extend in X direction", ExtendX, CostsDouble),
-        Upgrade::new(256, 100, "Extend in Y direction", ExtendY, CostsDouble),
-        Upgrade::new(64, 32, "Enable Automove", EnableAutomove, CostsOnetime),
-        Upgrade::new(512, 256, "Upgrade Automove", UpgradeAutomove, CostsDouble),
-        Upgrade::new(0, 0, "Harvest", Harvest, CostsStatic),
+        Upgrade::new(20, 10, ExtendX, CostsDouble),
+        Upgrade::new(256, 100, ExtendY, CostsDouble),
+        Upgrade::new(64, 32, EnableAutomove, CostsOnetime),
+        Upgrade::new(512, 256, UpgradeAutomove, CostsDouble),
+        Upgrade::new(0, 0, Harvest, CostsStatic),
         // Upgrade::new(256, 256, "Enable Autoharvesting", EnableAutoHarvest, CostsOnetime),
         // Upgrade::new(1024, 512, "Faster Autoharvesting", UpgradeAutoHarvest, CostsDouble),
-        Upgrade::new(
-            1000,
-            750,
-            "Scientific Notation",
-            ScientificNotation,
-            CostsOnetime,
-        ),
-        Upgrade::new(
-            16,
-            8,
-            "Place a 4 regularly",
-            EnableRandomPlace,
-            CostsOnetime,
-        ),
-        Upgrade::new(
-            64,
-            32,
-            "Upgrade Place a 4 regularly",
-            UpgradeRandomPlace,
-            CostsDouble,
-        ),
-        Upgrade::new(1024, 512, "Statistics", EnableStatistics, CostsStatic),
-        Upgrade::new(0, 0, "HARD RESET", Reset, CostsStatic),
+        Upgrade::new(1000, 750, ScientificNotation, CostsOnetime),
+        Upgrade::new(16, 8, EnableRandomPlace, CostsOnetime),
+        Upgrade::new(64, 32, UpgradeRandomPlace, CostsDouble),
+        Upgrade::new(124, 0, EnableStatistics, CostsStatic),
+        Upgrade::new(0, 0, Reset, CostsStatic),
     ]
 }
 
@@ -132,14 +181,15 @@ impl Points {
             points: self.points + points,
         }
     }
+    pub fn get(&self) -> usize {
+        self.points
+    }
 }
 impl Store for Points {
     fn new() -> Self {
-        // yewdux::prelude::init_listener(storage::StorageListener::<Self>::new(storage::Area::Local));
         storage::load(storage::Area::Local)
             .expect("Unable to load state")
             .unwrap_or_default()
-        // Self { points: 0 }
     }
     fn should_notify(&self, old: &Self) -> bool {
         self != old
@@ -172,32 +222,31 @@ impl Default for Upgrades {
 #[derive(Serialize, Deserialize)]
 pub struct Upgrade {
     pub visible: Cell<bool>,
-    pub cost: Cell<usize>,
-    pub show_at: Cell<usize>,
-    pub text: String,
+    pub cost: Cell<Condition>,
+    pub show: Cell<Condition>,
     pub action: UpgradeType,
     pub costs: UpgradeCosts,
 }
 // impl Eq for Upgrade {}
 impl Upgrade {
-    pub fn visible(&self, points: usize) -> bool {
+    pub fn visible(&self) -> bool {
         // show upgrade at threshold, don't hide it again
         if self.visible.get() {
             true
-        } else if points >= self.show_at.get() {
+        } else if self.show.get().check() {
             self.visible.set(true);
             true
         } else {
             false
         }
     }
-    pub fn clickable(&self, points: usize) -> bool {
-        points >= self.cost.get()
+    pub fn clickable(&self) -> bool {
+        self.cost.get().check()
     }
     pub fn run(&self) {
+        self.cost.get().fulfilled();
         // reduce points
-        let points = Dispatch::<Points>::new();
-        points.reduce(|points| points.sub(self.cost.get()));
+        // points.reduce(|points| points.sub(self.cost.get()));
         // change costs for next update level
         match self.costs {
             CostsStatic => self.costs_static(),
@@ -206,36 +255,29 @@ impl Upgrade {
         }
         // check if it should be remain visible
         self.visible.set(false);
-        self.visible(points.get().points);
+        self.visible();
 
         // run whatever the upgrade is supposed to do
         self.action.run();
     }
 
-    fn new(
-        cost: usize,
-        show_at: usize,
-        text: &'static str,
-        action: UpgradeType,
-        costs: UpgradeCosts,
-    ) -> Self {
+    fn new<T: Into<Condition>>(cost: T, show: T, action: UpgradeType, costs: UpgradeCosts) -> Self {
         Self {
             visible: Cell::new(false),
-            cost: Cell::new(cost),
-            show_at: Cell::new(show_at),
-            text: text.to_string(),
+            cost: Cell::new(cost.into()),
+            show: Cell::new(show.into()),
             action,
             costs,
         }
     }
     fn costs_double(&self) {
-        self.cost.set(self.cost.get() * 2);
-        self.show_at.set(self.show_at.get() * 2);
+        // self.cost.set(self.cost.get() * 2);
+        // self.show_at.set(self.show_at.get() * 2);
     }
     fn costs_static(&self) {}
     fn costs_onetime(&self) {
-        self.cost.set(usize::MAX);
-        self.show_at.set(usize::MAX);
+        // self.cost.set(usize::MAX);
+        // self.show_at.set(usize::MAX);
     }
 }
 fn do_automove() {

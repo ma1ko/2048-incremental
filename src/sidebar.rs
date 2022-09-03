@@ -1,10 +1,8 @@
 use yew::prelude::*;
 use yewdux::prelude::*;
 
-use crate::model::Model;
 // use crate::upgrade_button::Button;
 use crate::upgrade::*;
-use std::rc::Rc;
 
 
 

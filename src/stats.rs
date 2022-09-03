@@ -1,15 +1,16 @@
-use crate::*;
+use std::{ops::Add, borrow::BorrowMut};
+
+use crate::{*, model::UpgradeableBoard};
 
 #[derive(Serialize, Deserialize, Default, Eq, PartialEq, Clone)]
 pub struct Stats {
-    points: usize,
-    largest_harvest: usize,
+    pub points: usize,
+    pub largest_harvest: usize,
     enable: bool
 }
 impl Stats {
     pub fn points(&mut self, points: usize) {
         self.points += points;
-        // self
     }
     pub fn harvest(&mut self, harvest: usize) {
         self.largest_harvest = self.largest_harvest.max(harvest);
@@ -31,6 +32,10 @@ impl Store for Stats {
 
 #[function_component(Statistics)]
 pub fn statistics() -> html {
+    // let mut test = use_state(|| Stats::new());
+    // test.harvest(3);
+    // test.set(5);
+    // let test = test.borrow_mut();
     let (stats, _) = use_store::<Stats>();
     let harvest = 1 << stats.largest_harvest;
 

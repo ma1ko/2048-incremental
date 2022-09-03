@@ -3,7 +3,7 @@ use std::fmt::Display;
 use crate::maze::Direction::*;
 use crate::maze::*;
 use rand::Rng;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 #[cfg(target_arch = "x86_64")]
 use termion::raw::IntoRawMode;
 struct Cleanup {}
@@ -59,7 +59,7 @@ impl Board<Field> {
         for _ in 0..10 {
             let point = Point::random(self.max.x, self.max.y);
             if let Some(field) = self.board.get(&point) {
-                if field.value.is_none() { 
+                if field.value.is_none() {
                     self.board.insert(point, new_field);
                     return;
                 }
@@ -105,7 +105,6 @@ impl Board<Field> {
         return false;
     }
 }
-
 
 #[derive(Eq, PartialEq, Clone, Copy, Serialize, Deserialize)]
 pub struct Field {
