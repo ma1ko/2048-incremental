@@ -15,7 +15,10 @@ use std::rc::Rc;
 use yewdux::prelude::*;
 use yewdux::storage;
 use crate::stats::*;
+use crate::model::*;
+use crate::upgrade::*;
 
+use log::info;
 
 
 fn main() {

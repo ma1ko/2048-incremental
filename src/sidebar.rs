@@ -4,8 +4,6 @@ use yewdux::prelude::*;
 // use crate::upgrade_button::Button;
 use crate::upgrade::*;
 
-
-
 use crate::upgrade_button::*;
 
 #[function_component(ShowPoints)]
@@ -36,10 +34,12 @@ pub fn bar() -> html {
         .collect();
 
     html! {
-        <div class={classes!("float-right", "w-2/6")} >
-        <ShowPoints/>
-        {buttons}
-        <Statistics/>
-        </div>
+        <>
+            <ShowPoints/>
+            <div class={classes!("float-right", "w-2/6", "grid-cols-1", "grid-rows-6", "h-1/2")} >
+                {buttons}
+            </div>
+            <Statistics/>
+        </>
     }
 }

@@ -18,14 +18,62 @@ impl Drop for Cleanup {
 
 fn iter_board(iter: std::vec::IntoIter<BoardIterMut<Field>>) -> bool {
     iter.map(|mut row| {
-        let first = row.next().unwrap();
-        let (_, moved) = row.fold((first, false), |(acc, mov), field| {
-            let moved = field.combine(acc);
-            return (field, moved || mov);
-        });
-        moved
+        // let first = row.next().unwrap();
+        // let (_, moved) = row.fold((first, false), |(acc, mov), field| {
+        // let moved = field.combine(acc);
+        // return (field, moved || mov);
+        // });
+        // moved
+        iter_row(row)
     })
     .fold(false, |state, x| x || state)
+}
+// // compacts towards the back
+// fn iter_compact(mut iter: BoardIterMut<Field>) -> bool {
+//     let mut change = false;
+//     let mut current = iter.next().unwrap();
+//     while let Some(mut field) = iter.next() {
+//         if field.value.is_none() {
+//             field.value = current.take();
+
+//         }
+
+//     }
+
+// }
+fn iter_row(iter: BoardIterMut<Field>) -> bool {
+    // etremely ugly piece of code, I haven't found a better solution :(
+    let mut fields = iter.collect::<Vec<&mut Field>>();
+    let mut change = false;
+    let mut current = 0;
+    let mut i = 0;
+    while i < fields.len() - 1 {
+        i += 1;
+        if i == current {
+            continue;
+        }
+        if fields[i].value.is_none() {
+            continue;
+        }
+        if fields[current].value.is_none() {
+            // move
+            let value = fields[i].value.take();
+            fields[current].value = value;
+            change = true;
+            continue;
+        }
+        // both field have value, try combining
+        if fields[i].value == fields[current].value {
+            let value = fields[i].value.take().unwrap();
+            fields[current].value = Some(value + 1);
+            change = true;
+        } else {
+            // couldn't combine, move on to next field
+            current += 1;
+            i -= 1;
+        }
+    }
+    change
 }
 
 pub fn _main() {
@@ -72,26 +120,25 @@ impl Board<Field> {
         self.play(dir)
     }
     pub fn play(&mut self, direction: Direction) -> bool {
-        let mut any_change = false;
-        loop {
-            let change = match direction {
-                Right => iter_board(self.rows_mut()),
-                Left => iter_board(self.rows_mut_rev()),
-                Up => iter_board(self.columns_mut_rev()),
-                Down => iter_board(self.columns_mut()),
-                Nowhere => return false,
-            };
-            any_change = any_change || change;
-            if !change {
-                break;
-            }
-        }
-        if !any_change {
+        // let mut any_change = false;
+        // loop {
+        let change = match direction {
+            Left => iter_board(self.rows_mut()),
+            Right => iter_board(self.rows_mut_rev()),
+            Down => iter_board(self.columns_mut_rev()),
+            Up => iter_board(self.columns_mut()),
+            Nowhere => return false,
+        };
+        // any_change = any_change || change;
+        // if !change {
+        // break;
+        // }
+        // }
+        if !change {
             return false;
         }
-        // check if lost (doesn't work currently)
         if self.iter().all(|field| field.value.is_some()) {
-            log::info!("You lost");
+            // log::info!("You lost");
             return true;
         }
         // spawn random 2
@@ -106,7 +153,7 @@ impl Board<Field> {
     }
 }
 
-#[derive(Eq, PartialEq, Clone, Copy, Serialize, Deserialize)]
+#[derive(Eq, PartialEq, Serialize, Deserialize)]
 pub struct Field {
     pub value: Option<usize>,
 }

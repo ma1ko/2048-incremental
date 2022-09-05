@@ -97,7 +97,7 @@ impl Default for UpgradeableBoard {
         Self {
             board: RefCell::new(board),
             scientific_notation: Cell::new(false),
-            // clicker: RefCell::new(None),
+            points: Cell::new(0),
         }
     }
 }
@@ -112,9 +112,19 @@ impl Eq for UpgradeableBoard {}
 pub struct UpgradeableBoard {
     board: RefCell<Board<Field>>,
     scientific_notation: Cell<bool>,
+    pub points: Cell<usize>
 }
 
 impl UpgradeableBoard {
+    fn calc_points(&self) {
+        let points = self.board.borrow().iter().map(|field| {
+            1 << field.value.unwrap_or(0)
+        }).sum();
+        self.points.set(points);
+    }
+    pub fn get_points(&self) -> usize {
+        self.points.get()
+    }
     pub fn scientific_notation(&self) {
         self.scientific_notation.set(true);
     }
@@ -153,15 +163,24 @@ impl UpgradeableBoard {
         }
     }
     pub fn mv(&self) {
+        {
         self.board.borrow_mut().play_random();
+        }
+        self.calc_points();
     }
     fn play(&self, direction: Direction) {
+        {
         self.board.borrow_mut().play(direction);
+        }
+        self.calc_points();
     }
     pub fn random_place(&self, number: usize) {
+        {
         let mut board = self.board.borrow_mut();
         let field = Field::new(Some(number));
         board.random_empty_replace(field);
+        }
+        self.calc_points();
     }
 }
 

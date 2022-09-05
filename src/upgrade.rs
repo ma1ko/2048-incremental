@@ -12,11 +12,25 @@ macro_rules! run {
             state
         })
     }};
+
+    ($a:ident, $b:ident, $c:expr) => {{
+        let dispatch = Dispatch::<$a>::new();
+        dispatch.reduce(|state| {
+            state.$b($c);
+            state
+        })
+    }};
 }
 macro_rules! attr {
     ($a:ident, $b:ident) => {{
         let dispatch = Dispatch::<$a>::new().get();
         dispatch.$b
+    }};
+}
+macro_rules! get {
+    ($a:ident, $b:ident) => {{
+        let dispatch = Dispatch::<$a>::new().get();
+        dispatch.$b()
     }};
 }
 
@@ -80,39 +94,48 @@ impl UpgradeType {
 }
 #[derive(Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Condition {
+    AlltimePoints(usize),
     HavePoints(usize),
-    Harvest(usize),
+    AvgPoints(usize),
+    Harvested(usize),
     BoardSize(usize, usize),
-    No(),
+    PointsOnBoard(usize),
+    Free(),
 }
 impl Condition {
     pub fn check(&self) -> bool {
         use Condition::*;
         match self {
+            AlltimePoints(p) => attr!(Stats, points) >= *p,
+            AvgPoints(p) => attr!(Stats, avg) >= *p as f64,
+            PointsOnBoard(p) => get!(UpgradeableBoard, get_points) >= *p,
             HavePoints(p) => attr!(Points, points) >= *p,
-            Harvest(p) => attr!(Stats, largest_harvest) >= *p,
+            Harvested(p) => attr!(Stats, largest_harvest) >= *p,
             BoardSize(_, _) => unimplemented!(),
-            No() => true,
+            Free() => true,
         }
     }
     pub fn fulfilled(&self) {
-        use Condition::*;
         match self {
             HavePoints(p) => Dispatch::<Points>::new().reduce(|points| points.sub(*p)),
-            Harvest(_) => {}
-            BoardSize(_, _) => {}
-            No() => {}
+            // AlltimePoints(_) => {}
+            // Harvested(_) => {}
+            // BoardSize(_, _) => {}
+            // Free() => {}
+            _ => {}
         }
     }
 }
 impl Display for Condition {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        use Condition::*;
         match self {
-            HavePoints(p) => write!(f,"Requires {} points", p),
-            Harvest(p) => write!(f,"Harvest a block of at least {} points", p),
-            BoardSize(x,y) => write!(f,"Board must by at least {}x{}", x,y),
-            No() => write!(f,"Free")
+            AlltimePoints(p) => write!(f, "Earn a total of {} points", p),
+            HavePoints(p) => write!(f, "Requires {} points", p),
+            Harvested(p) => write!(f, "Harvest a block of at least {} points", p),
+            BoardSize(x, y) => write!(f, "Board must by at least {}x{}", x, y),
+            AvgPoints(p) => write!(f, "Earn at least {} points per second", p),
+            PointsOnBoard(p) => write!(f, "Have {} points on the board", p),
+            Free() => write!(f, "Free"),
         }
     }
 }
@@ -121,22 +144,29 @@ impl From<usize> for Condition {
         Condition::HavePoints(points)
     }
 }
+use Condition::*;
 
 pub fn get_upgrades() -> Vec<Upgrade> {
     use UpgradeType::*;
     vec![
-        Upgrade::new(20, 10, ExtendX, CostsDouble),
-        Upgrade::new(256, 100, ExtendY, CostsDouble),
+        Upgrade::new(AvgPoints(4), AvgPoints(2), ExtendX, CostsDouble),
+        Upgrade::new(PointsOnBoard(256), PointsOnBoard(100), ExtendY, CostsDouble),
         Upgrade::new(64, 32, EnableAutomove, CostsOnetime),
         Upgrade::new(512, 256, UpgradeAutomove, CostsDouble),
-        Upgrade::new(0, 0, Harvest, CostsStatic),
+        Upgrade::new(Free(), Free(), Harvest, CostsStatic),
         // Upgrade::new(256, 256, "Enable Autoharvesting", EnableAutoHarvest, CostsOnetime),
         // Upgrade::new(1024, 512, "Faster Autoharvesting", UpgradeAutoHarvest, CostsDouble),
         Upgrade::new(1000, 750, ScientificNotation, CostsOnetime),
         Upgrade::new(16, 8, EnableRandomPlace, CostsOnetime),
         Upgrade::new(64, 32, UpgradeRandomPlace, CostsDouble),
-        Upgrade::new(124, 0, EnableStatistics, CostsStatic),
-        Upgrade::new(0, 0, Reset, CostsStatic),
+        Upgrade::new(12, AlltimePoints(12), EnableStatistics, CostsOnetime),
+        Upgrade::new(Free(), Free(), Reset, CostsStatic),
+        Upgrade::new(
+            Harvested(128),
+            Harvested(32),
+            ScientificNotation,
+            CostsOnetime,
+        ),
     ]
 }
 
@@ -181,9 +211,6 @@ impl Points {
             points: self.points + points,
         }
     }
-    pub fn get(&self) -> usize {
-        self.points
-    }
 }
 impl Store for Points {
     fn new() -> Self {
@@ -221,9 +248,10 @@ impl Default for Upgrades {
 
 #[derive(Serialize, Deserialize)]
 pub struct Upgrade {
-    pub visible: Cell<bool>,
-    pub cost: Cell<Condition>,
-    pub show: Cell<Condition>,
+    // pub visible: Cell<bool>,
+    pub done: Cell<bool>,
+    pub cost: Condition,
+    pub show: Condition,
     pub action: UpgradeType,
     pub costs: UpgradeCosts,
 }
@@ -231,41 +259,42 @@ pub struct Upgrade {
 impl Upgrade {
     pub fn visible(&self) -> bool {
         // show upgrade at threshold, don't hide it again
-        if self.visible.get() {
-            true
-        } else if self.show.get().check() {
-            self.visible.set(true);
-            true
-        } else {
+        if self.done.get() {
             false
+        } else {
+            self.show.check()
         }
     }
     pub fn clickable(&self) -> bool {
-        self.cost.get().check()
+        self.cost.check()
     }
     pub fn run(&self) {
-        self.cost.get().fulfilled();
         // reduce points
-        // points.reduce(|points| points.sub(self.cost.get()));
-        // change costs for next update level
+        self.cost.fulfilled();
         match self.costs {
-            CostsStatic => self.costs_static(),
+            CostsStatic => {}
             CostsDouble => self.costs_double(),
-            CostsOnetime => self.costs_onetime(),
+            CostsOnetime => self.done.set(true),
         }
         // check if it should be remain visible
-        self.visible.set(false);
-        self.visible();
+        // self.visible.set(false);
+        // self.visible();
 
         // run whatever the upgrade is supposed to do
         self.action.run();
     }
 
-    fn new<T: Into<Condition>>(cost: T, show: T, action: UpgradeType, costs: UpgradeCosts) -> Self {
+    fn new<T: Into<Condition>, U: Into<Condition>>(
+        cost: T,
+        show: U,
+        action: UpgradeType,
+        costs: UpgradeCosts,
+    ) -> Self {
         Self {
-            visible: Cell::new(false),
-            cost: Cell::new(cost.into()),
-            show: Cell::new(show.into()),
+            // visible: Cell::new(false),
+            done: Cell::new(false),
+            cost: cost.into(),
+            show: show.into(),
             action,
             costs,
         }
@@ -280,27 +309,7 @@ impl Upgrade {
         // self.show_at.set(usize::MAX);
     }
 }
-fn do_automove() {
-    let dispatch = Dispatch::<UpgradeableBoard>::new();
-    dispatch.reduce(|board| {
-        board.mv();
-        board
-    });
-}
-fn do_harvest() {
-    let dispatch = Dispatch::<UpgradeableBoard>::new();
-    dispatch.reduce(|board| {
-        board.harvest();
-        board
-    });
-}
-fn do_random_place() {
-    let dispatch = Dispatch::<UpgradeableBoard>::new();
-    dispatch.reduce(|board| {
-        board.random_place(2);
-        board
-    });
-}
+
 use yewdux::storage::Area::Local;
 macro_rules! save {
     ($a:ident) => {
@@ -373,7 +382,7 @@ impl Store for AutoActions {
         me
     }
 }
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 enum Action {
     AutoMove,
     RandomPlace,
@@ -399,7 +408,6 @@ impl AutoAction {
         }
     }
     fn upgrade(&mut self, timediff: u32) {
-        // assert!(self.active);
         self.time -= timediff;
         self.set_callback();
     }
@@ -411,17 +419,15 @@ impl AutoAction {
         if !self.active {
             return;
         }
-        let f: &'static dyn Fn() = match self.action {
-            Action::AutoMove => &do_automove,
-            Action::AutoSave => &do_save,
-            Action::RandomPlace => &do_random_place,
-            Action::AutoHarvest => &do_harvest,
-        };
 
-        let dispatch = Dispatch::<UpgradeableBoard>::new();
-        let cb = dispatch.reduce_callback(|action| {
-            (f)();
-            action
+        let action = self.action.clone();
+        let cb = Callback::from(move |_| {
+            match action {
+                Action::AutoMove => run!(UpgradeableBoard, mv),
+                Action::AutoSave => do_save(),
+                Action::RandomPlace => run!(UpgradeableBoard, random_place, 2),
+                Action::AutoHarvest => run!(UpgradeableBoard, harvest),
+            };
         });
         self.interval = Some(Interval::new(self.time, move || cb.emit(())));
     }
