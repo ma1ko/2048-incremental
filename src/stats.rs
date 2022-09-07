@@ -40,7 +40,7 @@ pub fn statistics() -> html {
     // test.set(5);
     // let test = test.borrow_mut();
     let (stats, _) = use_store::<Stats>();
-    let harvest = 1 << stats.largest_harvest;
+    // let harvest = 1 << stats.largest_harvest;
 
     if !stats.enable {
         return html! {};
@@ -50,7 +50,7 @@ pub fn statistics() -> html {
 
        <h1> {"All Time Stats"} </h1>
        <p> {"Points: "} {stats.points} </p>
-       <p> {"Largest Harvest: "} {harvest} </p>
+       <p> {"Largest Harvest: "} {stats.largest_harvest} </p>
        <Average/>
 
         </div>

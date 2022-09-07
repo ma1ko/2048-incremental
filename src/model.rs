@@ -2,35 +2,34 @@ use gloo::events::EventListener;
 
 use crate::sidebar::SideBar;
 
-// use twentyfourtyeight::Field;
-fn color(value: usize) -> &'static str {
-    match value {
-        0 => "bg-blue-50",
-        1 => "bg-blue-100",
-        2 => "bg-blue-400",
-        3 => "bg-blue-700",
-        4 => "bg-red-100",
-        5 => "bg-red-400",
-        6 => "bg-red-700",
-        7 => "bg-green-100",
-        8 => "bg-green-400",
-        9 => "bg-green-700",
-        10 => "bg-black-100",
-        11 => "bg-black-400",
-        12 => "bg-black-700",
-        13 => "bg-yellow-100",
-        14 => "bg-yellow-400",
-        15 => "bg-yellow-700",
-        _ => "",
-    }
-}
+// // use twentyfourtyeight::Field;
+// fn color(value: usize) -> &'static str {
+//     match value {
+//         0 => "bg-blue-50",
+//         1 => "bg-blue-100",
+//         2 => "bg-blue-400",
+//         3 => "bg-blue-700",
+//         4 => "bg-red-100",
+//         5 => "bg-red-400",
+//         6 => "bg-red-700",
+//         7 => "bg-green-100",
+//         8 => "bg-green-400",
+//         9 => "bg-green-700",
+//         10 => "bg-black-100",
+//         11 => "bg-black-400",
+//         12 => "bg-black-700",
+//         13 => "bg-yellow-100",
+//         14 => "bg-yellow-400",
+//         15 => "bg-yellow-700",
+//         _ => "",
+//     }
+// }
 
 #[function_component(YewField)]
 fn field(props: &Props) -> html {
     let (board, _) = use_store::<UpgradeableBoard>();
-    let scientific_notation = board.scientific_notation.get();
     let board = board.board.borrow();
-    let value = board.board.get(&props.index).unwrap().value;
+    let number = board.board.get(&props.index).unwrap();
     let classes = classes!(
         "text-red-900",
         "text-center",
@@ -39,21 +38,21 @@ fn field(props: &Props) -> html {
         "flex",
         "items-center",
         "text-5xl",
-        color(value.unwrap_or(0))
+        number.color()
     );
-    let value = if let Some(value) = value {
-        if scientific_notation && value <= 1024 {
-            format!("2e{}", value)
-        } else {
-            (1 << value).to_string()
-        }
-    } else {
-        " ".to_string()
-    };
+    // let value = if let Some(value) = n{
+    //     if scientific_notation && value <= 1024 {
+    //         format!("2e{}", value)
+    //     } else {
+    //         (1 << value).to_string()
+    //     }
+    // } else {
+    //     " ".to_string()
+    // };
 
     // classes.push("a");
     html! {
-        <div class={classes}>{value}</div>
+        <div class={classes}>{number}</div>
     }
 }
 
@@ -70,7 +69,6 @@ pub enum Msg {
 }
 
 use crate::maze::*;
-use crate::twentyfourtyeight::Field;
 use crate::*;
 
 impl Store for UpgradeableBoard {
@@ -87,17 +85,18 @@ impl Store for UpgradeableBoard {
 impl Default for UpgradeableBoard {
     fn default() -> Self {
         let max = Point::new(4, 4);
-        let mut board: Board<Field> = Board::new(max);
+        let mut board: Board<Number> = Board::new(max);
         for i in 0..max.x {
             for j in 0..max.y {
-                board.insert(Point::new(i, j), Field::new(None));
+                board.insert(Point::new(i, j), Number::none());
             }
         }
-        board.insert(Point::new(0, 0), Field::new(Some(1)));
+        board.insert(Point::new(0, 0), Number::new(2));
         Self {
             board: RefCell::new(board),
             scientific_notation: Cell::new(false),
             points: Cell::new(0),
+            combine_fn: Cell::new(CombineFn::Standard),
         }
     }
 }
@@ -110,20 +109,27 @@ impl PartialEq for UpgradeableBoard {
 impl Eq for UpgradeableBoard {}
 #[derive(Deserialize, Serialize)]
 pub struct UpgradeableBoard {
-    board: RefCell<Board<Field>>,
-    scientific_notation: Cell<bool>,
-    pub points: Cell<usize>
+    board: RefCell<Board<Number>>,
+    pub scientific_notation: Cell<bool>,
+    pub points: Cell<usize>,
+    combine_fn: Cell<CombineFn>
 }
 
 impl UpgradeableBoard {
     fn calc_points(&self) {
-        let points = self.board.borrow().iter().map(|field| {
-            1 << field.value.unwrap_or(0)
-        }).sum();
+        let points = self
+            .board
+            .borrow()
+            .iter()
+            .map(|field| 1 << field.value.unwrap_or(0))
+            .sum();
         self.points.set(points);
     }
     pub fn get_points(&self) -> usize {
         self.points.get()
+    }
+    pub fn set_combine_fn(&self, f: CombineFn) {
+        self.combine_fn.set(f);
     }
     pub fn scientific_notation(&self) {
         self.scientific_notation.set(true);
@@ -132,7 +138,7 @@ impl UpgradeableBoard {
         let board = &mut self.board.borrow_mut();
         for i in 0..board.max.y {
             let point = Point::new(board.max.x, i);
-            board.insert(point, Field::new(None));
+            board.insert(point, Number::none())
         }
         board.max.x += 1;
     }
@@ -141,7 +147,7 @@ impl UpgradeableBoard {
         let board = &mut self.board.borrow_mut();
         for i in 0..board.max.x {
             let point = Point::new(i, board.max.y);
-            board.insert(point, Field::new(None));
+            board.insert(point, Number::none())
         }
         board.max.y += 1;
     }
@@ -153,9 +159,9 @@ impl UpgradeableBoard {
             .max_by(|(_, f1), (_, f2)| f1.value.cmp(&f2.value));
         if let Some((_, f)) = max {
             // let f: Field = self.board.board.remove(&p).unwrap();
-            let value = f.value.unwrap_or(0);
+            let value = 1 << f.value.unwrap_or(0);
             let dispatch = Dispatch::<Points>::new();
-            dispatch.reduce(|points| points.add(1 << value));
+            dispatch.reduce(|points| points.add(value));
 
             let dispatch = Dispatch::<Stats>::new();
             dispatch.reduce_mut(|points| points.harvest(value));
@@ -164,21 +170,21 @@ impl UpgradeableBoard {
     }
     pub fn mv(&self) {
         {
-        self.board.borrow_mut().play_random();
+            self.board.borrow_mut().play_random(self.combine_fn.get().into());
         }
         self.calc_points();
     }
     fn play(&self, direction: Direction) {
         {
-        self.board.borrow_mut().play(direction);
+            self.board.borrow_mut().play(direction, self.combine_fn.get().into());
         }
         self.calc_points();
     }
     pub fn random_place(&self, number: usize) {
         {
-        let mut board = self.board.borrow_mut();
-        let field = Field::new(Some(number));
-        board.random_empty_replace(field);
+            let mut board = self.board.borrow_mut();
+            let field = number.into();
+            board.random_empty_replace(field);
         }
         self.calc_points();
     }

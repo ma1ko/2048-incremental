@@ -5,6 +5,7 @@ mod twentyfourtyeight;
 mod upgrade_button;
 mod upgrade;
 mod stats;
+mod number;
 
 mod model;
 
@@ -17,6 +18,7 @@ use yewdux::storage;
 use crate::stats::*;
 use crate::model::*;
 use crate::upgrade::*;
+use crate::number::*;
 
 use log::info;
 

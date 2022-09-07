@@ -1,9 +1,9 @@
 use std::fmt::Display;
 
+use crate::*;
 use crate::maze::Direction::*;
 use crate::maze::*;
 use rand::Rng;
-use serde::{Deserialize, Serialize};
 #[cfg(target_arch = "x86_64")]
 use termion::raw::IntoRawMode;
 struct Cleanup {}
@@ -15,35 +15,18 @@ impl Drop for Cleanup {
         // println!("\u{001B}[?1049l");
     }
 }
+pub type CombineFn = dyn Fn(usize, usize) -> (usize, Option<usize>);
 
-fn iter_board(iter: std::vec::IntoIter<BoardIterMut<Field>>) -> bool {
-    iter.map(|mut row| {
-        // let first = row.next().unwrap();
-        // let (_, moved) = row.fold((first, false), |(acc, mov), field| {
-        // let moved = field.combine(acc);
-        // return (field, moved || mov);
-        // });
-        // moved
-        iter_row(row)
+fn iter_board(iter: std::vec::IntoIter<BoardIterMut<Number>>, f: Box<CombineFn>) -> bool {
+    iter.map(|row| {
+        iter_row(row,f.as_ref() )
     })
     .fold(false, |state, x| x || state)
 }
-// // compacts towards the back
-// fn iter_compact(mut iter: BoardIterMut<Field>) -> bool {
-//     let mut change = false;
-//     let mut current = iter.next().unwrap();
-//     while let Some(mut field) = iter.next() {
-//         if field.value.is_none() {
-//             field.value = current.take();
 
-//         }
-
-//     }
-
-// }
-fn iter_row(iter: BoardIterMut<Field>) -> bool {
+fn iter_row(iter: BoardIterMut<Number>, f: &CombineFn) -> bool {
     // etremely ugly piece of code, I haven't found a better solution :(
-    let mut fields = iter.collect::<Vec<&mut Field>>();
+    let mut fields = iter.collect::<Vec<&mut Number>>();
     let mut change = false;
     let mut current = 0;
     let mut i = 0;
@@ -64,9 +47,18 @@ fn iter_row(iter: BoardIterMut<Field>) -> bool {
         }
         // both field have value, try combining
         if fields[i].value == fields[current].value {
-            let value = fields[i].value.take().unwrap();
-            fields[current].value = Some(value + 1);
+            let (v1, v2) = f(fields[current].value.unwrap(), fields[i].value.unwrap());
+            fields[current].value = Some(v1);
+            fields[i].value = v2;
+            // let value = fields[i].value.take().unwrap();
+            // fields[current].value = Some(value + 1);
             change = true;
+            if fields[i].value.is_some() {
+                // we combined but have to continue due to bonus fields
+                current += 1;
+                i -= 1;
+
+            }
         } else {
             // couldn't combine, move on to next field
             current += 1;
@@ -81,13 +73,12 @@ pub fn _main() {
     #[cfg(target_arch = "x86_64")]
     let _raw_term = std::io::stdout().into_raw_mode().unwrap();
     let max = Point::new(4, 4);
-    let mut board: Board<Field> = Board::new(max);
+    let mut board: Board<Number> = Board::new(max);
     for i in 0..max.x {
         for j in 0..max.y {
-            board.insert(Point::new(i, j), Field::new(None));
-        }
+            board.insert(Point::new(i, j), 0.into())       }
     }
-    board.insert(Point::new(0, 0), Field::new(Some(2)));
+    board.insert(Point::new(0, 0), 2.into());
     println!("{}", board);
 
     let term = console::Term::stdout();
@@ -95,14 +86,14 @@ pub fn _main() {
         print!("{}\r\n", board);
         let key = term.read_key().unwrap();
         let direction: Direction = key.into();
-        let won = board.play(direction);
+        let won = board.play(direction, Box::new(|a,b| (a+1, None)));
         if won {
             break;
         }
     }
 }
-impl Board<Field> {
-    pub fn random_empty_replace(&mut self, new_field: Field) {
+impl Board<Number> {
+    pub fn random_empty_replace(&mut self, new_field: Number) {
         // Timeout in case we're full
         for _ in 0..10 {
             let point = Point::random(self.max.x, self.max.y);
@@ -114,26 +105,20 @@ impl Board<Field> {
             }
         }
     }
-    pub fn play_random(&mut self) -> bool {
+    pub fn play_random(&mut self, f: Box<CombineFn>) -> bool {
         let mut rng = rand::thread_rng();
         let dir: Direction = rng.gen_range(0..4).into();
-        self.play(dir)
+        self.play(dir, f)
     }
-    pub fn play(&mut self, direction: Direction) -> bool {
-        // let mut any_change = false;
-        // loop {
+    pub fn play(&mut self, direction: Direction, f: Box<CombineFn>) -> bool {
         let change = match direction {
-            Left => iter_board(self.rows_mut()),
-            Right => iter_board(self.rows_mut_rev()),
-            Down => iter_board(self.columns_mut_rev()),
-            Up => iter_board(self.columns_mut()),
+            Left => iter_board(self.rows_mut(), f),
+            Right => iter_board(self.rows_mut_rev(),f),
+            Down => iter_board(self.columns_mut_rev(),f),
+            Up => iter_board(self.columns_mut(),f),
             Nowhere => return false,
         };
-        // any_change = any_change || change;
-        // if !change {
-        // break;
-        // }
-        // }
+
         if !change {
             return false;
         }
@@ -145,7 +130,7 @@ impl Board<Field> {
         loop {
             let p = Point::random(self.max.x, self.max.y);
             if self.board.get(&p).unwrap().value.is_none() {
-                self.board.insert(p, Field::new(Some(1)));
+                self.board.insert(p, 2.into());
                 break;
             }
         }
@@ -153,43 +138,43 @@ impl Board<Field> {
     }
 }
 
-#[derive(Eq, PartialEq, Serialize, Deserialize)]
-pub struct Field {
-    pub value: Option<usize>,
-}
-impl Field {
-    pub fn new(value: Option<usize>) -> Self {
-        Self { value }
-    }
-    pub fn combine(&mut self, other: &mut Field) -> bool {
-        if let Some(value) = &mut self.value {
-            if let Some(other_value) = &other.value {
-                if value == other_value {
-                    *value = *value + 1;
-                    other.value = None;
-                    true
-                } else {
-                    false
-                }
-            } else {
-                false
-            }
-        } else {
-            if other.value.is_some() {
-                self.value = other.value.take();
-                true
-            } else {
-                false
-            }
-        }
-    }
-}
-impl Display for Field {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if let Some(val) = self.value {
-            write!(f, "{}", val)
-        } else {
-            write!(f, " ")
-        }
-    }
-}
+// #[derive(Eq, PartialEq, Serialize, Deserialize)]
+// pub struct Field {
+//     pub value: Option<usize>,
+// }
+// impl Field {
+//     pub fn new(value: Option<usize>) -> Self {
+//         Self { value }
+//     }
+//     pub fn combine(&mut self, other: &mut Field) -> bool {
+//         if let Some(value) = &mut self.value {
+//             if let Some(other_value) = &other.value {
+//                 if value == other_value {
+//                     *value = *value + 1;
+//                     other.value = None;
+//                     true
+//                 } else {
+//                     false
+//                 }
+//             } else {
+//                 false
+//             }
+//         } else {
+//             if other.value.is_some() {
+//                 self.value = other.value.take();
+//                 true
+//             } else {
+//                 false
+//             }
+//         }
+//     }
+// }
+// impl Display for Field {
+//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+//         if let Some(val) = self.value {
+//             write!(f, "{}", val)
+//         } else {
+//             write!(f, " ")
+//         }
+//     }
+// }
