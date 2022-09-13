@@ -1,4 +1,5 @@
 
+mod points;
 mod maze;
 mod sidebar;
 mod twentyfourtyeight;
@@ -19,10 +20,13 @@ use crate::stats::*;
 use crate::model::*;
 use crate::upgrade::*;
 use crate::number::*;
+use crate::points::*;
+use crate::upgrade_button::*;
 
 use log::info;
 
-
+#[global_allocator]
+static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 fn main() {
     wasm_logger::init(wasm_logger::Config::default());
     yew::start_app::<model::Model>();

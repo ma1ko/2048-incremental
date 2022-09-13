@@ -2,9 +2,7 @@ use yew::prelude::*;
 use yewdux::prelude::*;
 
 // use crate::upgrade_button::Button;
-use crate::upgrade::*;
-
-use crate::upgrade_button::*;
+use crate::*;
 
 #[function_component(ShowPoints)]
 pub fn points() -> html {
@@ -21,25 +19,38 @@ use crate::stats::*;
 #[function_component(SideBar)]
 pub fn bar() -> html {
     let (upgrades, _) = use_store::<Upgrades>();
-    let (_, _) = use_store::<Points>();
-    let buttons: Html = upgrades
-        .upgrades
-        .iter()
-        .enumerate()
-        .map(|(index, _upgrade)| {
+    // let _ = use_store::<Stats>();
+    // let _ = use_store::<UpgradeableBoard>();
+    // let _ = use_store::<Points>();
+    let statics = upgrades
+        .statics()
+        .map(|upgrade| {
             html! {
-                <> <UpgradeButton {index}/> <br/> </>
+                <> <UpgradeButton {upgrade}/> </>
             }
-        })
-        .collect();
+        });
+    let onetime = upgrades
+        .onetimes()
+        .map(|upgrade| {
+            html! {
+                <> <UpgradeButton {upgrade}/> </>
+            }
+        });
 
     html! {
-        <>
-            <ShowPoints/>
-            <div class={classes!("float-right", "w-2/6", "grid-cols-1", "grid-rows-6", "h-1/2")} >
-                {buttons}
+        <div classes={classes!("float-right", "w-2/6")}>
+            
+            <ShowPoints/> <br/>
+            <div class={classes!("float-left", "w-1/6", "grid-cols-1", "grid-rows-6", "h-1/2")} >
+                <p> {"Actions (Move the Board with WASD):"} </p>
+                {statics.collect::<Html>()}
+                <br/>
+                <Statistics/>
             </div>
-            <Statistics/>
-        </>
+            <div class={classes!("float-right", "w-1/6", "grid-cols-1", "grid-rows-6", "h-1/2")} >
+                <p> {"Upgrades"} </p>
+                {onetime.collect::<Html>()}
+            </div>
+        </div>
     }
 }

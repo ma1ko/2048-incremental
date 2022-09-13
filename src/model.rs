@@ -1,29 +1,7 @@
 use gloo::events::EventListener;
+use rand::prelude::SliceRandom;
 
 use crate::sidebar::SideBar;
-
-// // use twentyfourtyeight::Field;
-// fn color(value: usize) -> &'static str {
-//     match value {
-//         0 => "bg-blue-50",
-//         1 => "bg-blue-100",
-//         2 => "bg-blue-400",
-//         3 => "bg-blue-700",
-//         4 => "bg-red-100",
-//         5 => "bg-red-400",
-//         6 => "bg-red-700",
-//         7 => "bg-green-100",
-//         8 => "bg-green-400",
-//         9 => "bg-green-700",
-//         10 => "bg-black-100",
-//         11 => "bg-black-400",
-//         12 => "bg-black-700",
-//         13 => "bg-yellow-100",
-//         14 => "bg-yellow-400",
-//         15 => "bg-yellow-700",
-//         _ => "",
-//     }
-// }
 
 #[function_component(YewField)]
 fn field(props: &Props) -> html {
@@ -40,17 +18,6 @@ fn field(props: &Props) -> html {
         "text-5xl",
         number.color()
     );
-    // let value = if let Some(value) = n{
-    //     if scientific_notation && value <= 1024 {
-    //         format!("2e{}", value)
-    //     } else {
-    //         (1 << value).to_string()
-    //     }
-    // } else {
-    //     " ".to_string()
-    // };
-
-    // classes.push("a");
     html! {
         <div class={classes}>{number}</div>
     }
@@ -95,7 +62,7 @@ impl Default for UpgradeableBoard {
         Self {
             board: RefCell::new(board),
             scientific_notation: Cell::new(false),
-            points: Cell::new(0),
+            points: Cell::new(2),
             combine_fn: Cell::new(CombineFn::Standard),
         }
     }
@@ -112,16 +79,31 @@ pub struct UpgradeableBoard {
     board: RefCell<Board<Number>>,
     pub scientific_notation: Cell<bool>,
     pub points: Cell<usize>,
-    combine_fn: Cell<CombineFn>
+    combine_fn: Cell<CombineFn>,
 }
 
 impl UpgradeableBoard {
+    pub fn shuffle(&self) {
+        let mut board = self.board.borrow_mut();
+        let mut values = board
+            .iter_mut()
+            .map(|value| value.value.take())
+            .collect::<Vec<_>>();
+        let mut rng = rand::thread_rng();
+        values.shuffle(&mut rng);
+        values
+            .into_iter()
+            .zip(board.iter_mut())
+            .for_each(|(value, board)| {
+                board.set(value);
+            });
+    }
     fn calc_points(&self) {
         let points = self
             .board
             .borrow()
             .iter()
-            .map(|field| 1 << field.value.unwrap_or(0))
+            .map(|field| field.value())
             .sum();
         self.points.set(points);
     }
@@ -156,37 +138,47 @@ impl UpgradeableBoard {
         let max = board
             .board
             .iter_mut()
-            .max_by(|(_, f1), (_, f2)| f1.value.cmp(&f2.value));
+            .max_by(|(_, f1), (_, f2)| f1.value().cmp(&f2.value()));
         if let Some((_, f)) = max {
-            // let f: Field = self.board.board.remove(&p).unwrap();
-            let value = 1 << f.value.unwrap_or(0);
+            // let value = 1 << f.value.unwrap_or(0);
+            let value = f.value();
             let dispatch = Dispatch::<Points>::new();
             dispatch.reduce(|points| points.add(value));
 
             let dispatch = Dispatch::<Stats>::new();
             dispatch.reduce_mut(|points| points.harvest(value));
-            f.value = None;
+            let dispatch = Dispatch::<Avg>::new();
+            dispatch.reduce_mut(|avg| avg.harvested(value));
+            self.points.set(self.points.get() - value);
+            f.set(None);
         }
     }
-    pub fn mv(&self) {
-        {
-            self.board.borrow_mut().play_random(self.combine_fn.get().into());
-        }
-        self.calc_points();
+    pub fn mv(&self) -> usize {
+        let points = self
+            .board
+            .borrow_mut()
+            .play_random(self.combine_fn.get().into());
+        self.points.set(self.points.get() + points);
+        points
     }
-    fn play(&self, direction: Direction) {
-        {
-            self.board.borrow_mut().play(direction, self.combine_fn.get().into());
-        }
-        self.calc_points();
+    fn play(&self, direction: Direction) -> usize {
+        let points = self
+            .board
+            .borrow_mut()
+            .play(direction, self.combine_fn.get().into());
+        self.points.set(self.points.get() + points);
+        points
     }
     pub fn random_place(&self, number: usize) {
-        {
-            let mut board = self.board.borrow_mut();
-            let field = number.into();
-            board.random_empty_replace(field);
-        }
-        self.calc_points();
+        // {
+        let mut board = self.board.borrow_mut();
+        let field = number.into();
+        let value = board.random_empty_replace(field);
+        self.points.set(self.points.get() + value);
+        // }
+        // self.calc_points();
+        // let dispatch = Dispatch::<Avg>::new();
+        // dispatch.reduce_mut(|avg| avg.manually_added(number));
     }
 }
 
@@ -240,9 +232,13 @@ impl Component for Model {
                     40 | 83 => Direction::Down,
                     _ => Direction::Nowhere,
                 };
+                let mut points = 0;
                 self.board.reduce(|board| {
-                    board.play(direction);
+                    points = board.play(direction);
                     board
+                });
+                Dispatch::<Avg>::new().reduce_mut(|avg| {
+                    avg.manually_added(points);
                 });
             }
             Msg::Board(_board) => { /* Board has changed, redraw it */ }

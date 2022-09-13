@@ -1,15 +1,12 @@
-use std::{borrow::BorrowMut, ops::Add};
-
 use gloo::timers::callback::Interval;
 
-use crate::{model::UpgradeableBoard, *};
-
+use crate::*;
 #[derive(Serialize, Deserialize, Default, PartialEq, Clone)]
 pub struct Stats {
     pub points: usize,
     pub largest_harvest: usize,
     enable: bool,
-    pub avg: f64,
+    // pub avg: f64,
 }
 impl Stats {
     pub fn points(&mut self, points: usize) {
@@ -35,12 +32,9 @@ impl Store for Stats {
 
 #[function_component(Statistics)]
 pub fn statistics() -> html {
-    // let mut test = use_state(|| Stats::new());
-    // test.harvest(3);
-    // test.set(5);
-    // let test = test.borrow_mut();
     let (stats, _) = use_store::<Stats>();
-    // let harvest = 1 << stats.largest_harvest;
+    let  _ = use_store::<Timer>();
+    let points_on_board = Dispatch::<UpgradeableBoard>::new().get().points.get();
 
     if !stats.enable {
         return html! {};
@@ -51,7 +45,9 @@ pub fn statistics() -> html {
        <h1> {"All Time Stats"} </h1>
        <p> {"Points: "} {stats.points} </p>
        <p> {"Largest Harvest: "} {stats.largest_harvest} </p>
+       <p> {"Points on the board: "} {points_on_board} </p>
        <Average/>
+       <ShowShuffles/>
 
         </div>
     }
@@ -69,7 +65,51 @@ impl Store for Timer {
             _interval: Interval::new(100, interval),
         }
     }
+
     fn should_notify(&self, _old: &Self) -> bool {
+        true
+    }
+}
+
+#[derive(Copy, Clone, PartialEq)]
+pub struct Avg {
+    last: f64,
+    avg: f64,
+}
+impl Avg {
+    fn avg(&mut self) -> f64 {
+        let dispatch = Dispatch::<UpgradeableBoard>::new().get();
+        let points = dispatch.points.get() as f64;
+        let last = self.last;
+        let avg = self.avg;
+
+        let new = (points - last).max(0.0);
+        let avg = avg - (avg / 100.0);
+        let avg = avg + (new / 100.0);
+        self.avg = avg;
+        self.last = points;
+        avg
+    }
+    pub fn get_avg(&self) -> f64 {
+        self.avg * 10.0
+    }
+    pub fn harvested(&mut self, value: usize) {
+        self.last -= value as f64
+    }
+    pub fn manually_added(&mut self, value: usize) {
+        self.last += value as f64
+    }
+}
+impl Store for Avg {
+    fn new() -> Self {
+        let dispatch = Dispatch::<UpgradeableBoard>::new().get();
+        let points = dispatch.points.get() as f64;
+        Avg {
+            last: points,
+            avg: 0.0,
+        }
+    }
+    fn should_notify(&self, old: &Self) -> bool {
         true
     }
 }
@@ -77,28 +117,30 @@ impl Store for Timer {
 #[function_component(Average)]
 fn average() -> Html {
     let (_, _) = use_store::<Timer>();
-    let stats = Dispatch::<Stats>::new();
+    // let stats = Dispatch::<Stats>::new();
 
-    let dispatch = Dispatch::<UpgradeableBoard>::new().get();
+    let dispatch = Dispatch::<Avg>::new();
+    dispatch.reduce_mut(|avg| avg.avg());
+    let avg = dispatch.get().get_avg();
 
-    let points = dispatch.points.get() as f64;
+    // let points = dispatch.points.get() as f64;
 
-    let store = use_mut_ref(|| points);
-    let last = *store.borrow();
-    let avg = stats.get().avg;
+    // let store = use_mut_ref(|| points);
+    // let last = Dispatch::<Avg>::new().get().last;
+    // let avg = stats.get().avg;
 
-    // rolling moving average calculation over 10s
-    let new = (points - last).max(0.0);
-    let avg = avg - (avg / 100.0);
-    let avg = avg + (new / 100.0);
+    // // rolling moving average calculation over 10s
+    // let new = (points - last).max(0.0);
+    // let avg = avg - (avg / 100.0);
+    // let avg = avg + (new / 100.0);
 
-    stats.reduce_mut(|stats| stats.avg = avg);
-    // info!("Points: {}, last: {}, avg: {}", points, last, avg);
-    store.replace(points);
+    // stats.reduce_mut(|stats| stats.avg = avg);
+    // // info!("Points: {}, last: {}, avg: {}", points, last, avg);
+    // store.replace(points);
 
     html! {
         <p>
-            {format!("Avg Points/s: {0:.2}", avg * 10.0)}
+            {format!("Avg Points/s: {0:.2}", avg)}
         </p>
 
     }

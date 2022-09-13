@@ -16,13 +16,13 @@ impl Deref for Number {
 impl Display for Number {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if let Some(number) = self.value {
-            if number >= 128
+            if 1 << number >= 128
                 && Dispatch::<UpgradeableBoard>::new()
                     .get()
                     .scientific_notation
                     .get()
             {
-                write!(f, "{}", number)
+                write!(f, "2e{}", number)
             } else {
                 write!(f, "{}", 1 << number)
             }
@@ -40,15 +40,33 @@ impl From<usize> for Number {
         }
     }
 }
+impl From<Option<usize>> for Number {
+    fn from(value: Option<usize>) -> Self {
+            Self {value}
+    }
+}
 impl Number {
+    pub fn value(&self) -> usize {
+        if let Some(value) = self.value {
+            1 << value
+        }
+        else {
+            0
+        }
+    }
+    pub fn set(&mut self, value: Option<usize>){
+        self.value = value;
+
+    }
     pub fn scientific(value: usize) -> Self {
         Number { value: Some(value) }
     }
     pub fn new(value: usize) -> Self {
+        assert!(value >= 2);
         let x = Number {
-            value: Some(1 << value.trailing_zeros()),
+            value: Some(1 << value.trailing_zeros() - 1),
         };
-        log::info!("{} become 2e{}", value, x.value.unwrap());
+        // log::info!("{} become 2e{}", value, x.value.unwrap());
         x
     }
     pub fn none() -> Self {
