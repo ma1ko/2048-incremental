@@ -1,4 +1,3 @@
-use std::fmt::Display;
 
 use crate::maze::Direction::*;
 use crate::maze::*;
@@ -84,7 +83,7 @@ pub fn _main() {
         print!("{}\r\n", board);
         let key = term.read_key().unwrap();
         let direction: Direction = key.into();
-        let won = board.play(direction, Box::new(|a, b| (a + 1, None)));
+        let _won = board.play(direction, Box::new(|a, _| (a + 1, None)));
         // if won {
         //     break;
         // }

@@ -58,7 +58,7 @@ impl Number {
         self.value = value;
 
     }
-    pub fn scientific(value: usize) -> Self {
+    pub fn _scientific(value: usize) -> Self {
         Number { value: Some(value) }
     }
     pub fn new(value: usize) -> Self {

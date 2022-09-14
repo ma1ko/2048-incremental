@@ -150,13 +150,14 @@ impl UpgradeableBoard {
 
             // Update stats
             let dispatch = Dispatch::<Stats>::new();
-            dispatch.reduce_mut(|points| points.harvest(value));
+            dispatch.reduce_mut(|stats| stats.harvest(value));
             // Need to exclude that from stats too
             let dispatch = Dispatch::<Avg>::new();
             dispatch.reduce_mut(|avg| avg.harvested(value));
-            self.points.set(self.points.get() - value);
+            // self.points.set(self.points.get() - value);
             f.set(None);
         }
+        self.calc_points();
     }
     pub fn mv(&self) -> usize {
         let points = self

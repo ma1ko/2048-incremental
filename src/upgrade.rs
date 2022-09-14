@@ -1,7 +1,6 @@
 use crate::model::UpgradeableBoard;
 use crate::*;
 use gloo::timers::callback::Interval;
-use std::borrow::Borrow;
 use std::fmt::Display;
 
 macro_rules! run {
@@ -22,13 +21,8 @@ macro_rules! run {
         })
     }};
 }
-macro_rules! attr {
-    ($a:ident, $b:ident) => {{
-        let dispatch = Dispatch::<$a>::new().get();
-        dispatch.$b
-    }};
-}
-macro_rules! get {
+
+macro_rules! _get {
     ($a:ident, $b:ident) => {{
         let dispatch = Dispatch::<$a>::new().get();
         dispatch.$b()
@@ -225,7 +219,7 @@ impl Display for Condition {
             Free() => write!(f, "Free"),
             // Multi(a, b) => write!(f, "{} AND {}", a, b),
             UpgradeDone(upgrade) => write!(f, "Bought Upgrade \"{}\"", upgrade),
-            Until(upgrade) => write!(f, ""),
+            Until(_) => write!(f, ""),
             // Between(a, b) => write!(f, "{}", a),
         }
     }
@@ -253,16 +247,17 @@ pub fn get_upgrades() -> Vec<Upgrade> {
         // Upgrades
         // ExtendX
         Upgrade::new(AvgPoints(4), Free(), ExtendX(1)),
-        Upgrade::new(AvgPoints(8), AvgPoints(6), ExtendX(2)),
+        Upgrade::new(AvgPoints(8), ExtendX(1), ExtendX(2)),
+        Upgrade::new(AvgPoints(15), ExtendX(2), ExtendX(3)),
         // ExtendY
         Upgrade::new(PointsOnBoard(256), PointsOnBoard(128), ExtendY(1)),
         Upgrade::new(PointsOnBoard(1024), ExtendY(1), ExtendY(2)),
+        Upgrade::new(PointsOnBoard(4096), ExtendY(2), ExtendY(3)),
         // Automation
         Upgrade::new(64, 32, EnableAutomove),
-        Upgrade::new(512, EnableAutomove, UpgradeAutomove(800)),
-        Upgrade::new(10_000, UpgradeAutomove(800), UpgradeAutomove(500)),
+        Upgrade::new(512, EnableAutomove, UpgradeAutomove(750)),
+        Upgrade::new(10_000, UpgradeAutomove(750), UpgradeAutomove(500)),
         Upgrade::new(100_000, UpgradeAutomove(500), UpgradeAutomove(250)),
-        Upgrade::new(1_000, UpgradeAutomove(500), EnableShuffle),
         // Upgrade::new(256, 256, "Enable Autoharvesting", EnableAutoHarvest, CostsOnetime),
         // Upgrade::new(1024, 512, "Faster Autoharvesting", UpgradeAutoHarvest, CostsDouble),
         Upgrade::new(16, 8, EnableRandomPlace),
@@ -270,7 +265,7 @@ pub fn get_upgrades() -> Vec<Upgrade> {
         Upgrade::new(256, UpgradeRandomPlace(800), UpgradeRandomPlace(500)),
         // Shuffling
         Upgrade::new(1_000, UpgradeAutomove(500), EnableShuffle),
-        Upgrade::new(10_000, BoardSize(6,6), AutoShuffle(30000)),
+        Upgrade::new(HaveShuffles(100), BoardSize(6,6), AutoShuffle(30000)),
 
 
 
