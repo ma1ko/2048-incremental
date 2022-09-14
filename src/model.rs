@@ -107,6 +107,9 @@ impl UpgradeableBoard {
             .sum();
         self.points.set(points);
     }
+    pub fn boardsize(&self) -> Point {
+        self.board.borrow().max
+    }
     pub fn get_points(&self) -> usize {
         self.points.get()
     }
@@ -140,13 +143,15 @@ impl UpgradeableBoard {
             .iter_mut()
             .max_by(|(_, f1), (_, f2)| f1.value().cmp(&f2.value()));
         if let Some((_, f)) = max {
-            // let value = 1 << f.value.unwrap_or(0);
             let value = f.value();
+            // Add points
             let dispatch = Dispatch::<Points>::new();
             dispatch.reduce(|points| points.add(value));
 
+            // Update stats
             let dispatch = Dispatch::<Stats>::new();
             dispatch.reduce_mut(|points| points.harvest(value));
+            // Need to exclude that from stats too
             let dispatch = Dispatch::<Avg>::new();
             dispatch.reduce_mut(|avg| avg.harvested(value));
             self.points.set(self.points.get() - value);

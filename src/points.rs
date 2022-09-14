@@ -87,7 +87,12 @@ impl Shuffles {
         self.amount
     }
     pub fn enable(&mut self) {
-        self.enabled = true
+        self.enabled = true;
+        self.amount = 1.0;
+    }
+    pub fn sub(&mut self, amount: f64) {
+        self.amount -= amount;
+
     }
 }
 

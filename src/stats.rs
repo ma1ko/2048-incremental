@@ -25,8 +25,8 @@ impl Store for Stats {
             .expect("Unable to load state")
             .unwrap_or_default()
     }
-    fn should_notify(&self, _old: &Self) -> bool {
-        true
+    fn should_notify(&self, old: &Self) -> bool {
+        self != old
     }
 }
 
@@ -110,7 +110,7 @@ impl Store for Avg {
         }
     }
     fn should_notify(&self, old: &Self) -> bool {
-        true
+        self != old
     }
 }
 
@@ -122,22 +122,6 @@ fn average() -> Html {
     let dispatch = Dispatch::<Avg>::new();
     dispatch.reduce_mut(|avg| avg.avg());
     let avg = dispatch.get().get_avg();
-
-    // let points = dispatch.points.get() as f64;
-
-    // let store = use_mut_ref(|| points);
-    // let last = Dispatch::<Avg>::new().get().last;
-    // let avg = stats.get().avg;
-
-    // // rolling moving average calculation over 10s
-    // let new = (points - last).max(0.0);
-    // let avg = avg - (avg / 100.0);
-    // let avg = avg + (new / 100.0);
-
-    // stats.reduce_mut(|stats| stats.avg = avg);
-    // // info!("Points: {}, last: {}, avg: {}", points, last, avg);
-    // store.replace(points);
-
     html! {
         <p>
             {format!("Avg Points/s: {0:.2}", avg)}

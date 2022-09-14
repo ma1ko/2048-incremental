@@ -1,10 +1,12 @@
 use crate::model::UpgradeableBoard;
 use crate::*;
 use gloo::timers::callback::Interval;
+use std::borrow::Borrow;
 use std::fmt::Display;
 
 macro_rules! run {
     ($a:ident, $b:ident) => {{
+        log::info!("Running ",);
         let dispatch = Dispatch::<$a>::new();
         dispatch.reduce(|state| {
             state.$b();
@@ -43,8 +45,10 @@ pub enum UpgradeCosts {
     CostsOnetime,
     CostsStatic,
 }
-#[derive(Clone, PartialEq, Eq, Copy, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Copy, Serialize, Deserialize, Debug)]
 pub enum UpgradeType {
+    EnableShuffle,
+    AutoShuffle(usize),
     Shuffle,
     Place(usize),
     ExtendX(usize),
@@ -52,7 +56,7 @@ pub enum UpgradeType {
     EnableAutomove,
     UpgradeAutomove(usize),
     EnableAutoHarvest,
-    UpgradeAutoHarvest,
+    UpgradeAutoHarvest(usize),
     EnableRandomPlace,
     UpgradeRandomPlace(usize),
     Reset,
@@ -71,6 +75,8 @@ impl<'a> UpgradeType {
     pub fn text(&self) -> String {
         use UpgradeType::*;
         match self {
+            EnableShuffle => "Enable shuffling the board".into(),
+            AutoShuffle(i) => format!("Automatically shuffle the board every {}ms", i),
             Shuffle => "Shuffle the Board".into(),
             Place(n) => format!("Place a {}", n),
             ExtendX(_) => "Extend Board horizontally".into(),
@@ -79,7 +85,7 @@ impl<'a> UpgradeType {
             EnableRandomPlace => "Place a 4 randomly".into(),
             UpgradeRandomPlace(_) => "Place 4 faster".into(),
             EnableAutoHarvest => "Harvest largest number regularly".into(),
-            UpgradeAutoHarvest => "Harvest faster".into(),
+            UpgradeAutoHarvest(_) => "Harvest faster".into(),
             UpgradeAutomove(_) => "Move faster".into(),
             Reset => "HARD RESET".into(),
             Harvest => "Harvest largest Number".into(),
@@ -92,16 +98,18 @@ impl<'a> UpgradeType {
     fn run(&self) {
         use UpgradeType::*;
         match self {
-            Shuffle => run!(UpgradeableBoard, shuffle),
+            EnableShuffle => Dispatch::<Shuffles>::new().reduce_mut(|s| s.enable()),
+            AutoShuffle(x) => run!(AutoActions, upgrade_autoshuffle, *x),
+            Shuffle => board(&UpgradeableBoard::shuffle),
             Place(x) => run!(UpgradeableBoard, random_place, *x),
             ExtendX(_) => run!(UpgradeableBoard, extend_x),
             ExtendY(_) => run!(UpgradeableBoard, extend_y),
             EnableAutomove => run!(AutoActions, enable_automove),
             EnableRandomPlace => run!(AutoActions, enable_random_place),
-            UpgradeAutomove(n) => run!(AutoActions, upgrade_automove,*n ),
-            UpgradeRandomPlace(n) => run!(AutoActions, upgrade_random_place,*n),
+            UpgradeAutomove(n) => run!(AutoActions, upgrade_automove, *n),
+            UpgradeRandomPlace(n) => run!(AutoActions, upgrade_random_place, *n),
             EnableAutoHarvest => run!(AutoActions, enable_autoharvest),
-            UpgradeAutoHarvest => run!(AutoActions, upgrade_autoharvest),
+            UpgradeAutoHarvest(n) => run!(AutoActions, upgrade_autoharvest, *n),
             Reset => reset(),
             Harvest => run!(UpgradeableBoard, harvest),
             ScientificNotation => run!(UpgradeableBoard, scientific_notation),
@@ -116,40 +124,86 @@ impl From<UpgradeType> for Condition {
         UpgradeDone(u)
     }
 }
-#[derive(Eq, PartialEq, Clone, Serialize, Deserialize)]
+#[derive(PartialEq, Clone, Serialize, Deserialize)]
 pub enum Condition {
     AlltimePoints(usize),
     HavePoints(usize),
+    HaveShuffles(usize),
     AvgPoints(usize),
     Harvested(usize),
     BoardSize(usize, usize),
     PointsOnBoard(usize),
     Free(),
-    Multi(Box<Condition>, Box<Condition>),
+    // Multi(Box<Condition>, Box<Condition>),
     UpgradeDone(UpgradeType),
     Until(UpgradeType),
-    Between(Box<Condition>, Box<Condition>),
+    // Between(Box<Condition>, Box<Condition>),
 }
+fn board(f: &dyn Fn(&UpgradeableBoard)) {
+    run::<UpgradeableBoard>(f)
+}
+
+fn run<S: Store>(f: &dyn Fn(&S)) {
+    let x = Dispatch::<S>::new();
+    x.reduce(|dispatch| {
+        f(dispatch.as_ref());
+        dispatch
+    });
+}
+
+fn get<S: Store>() -> Rc<S> {
+    Dispatch::<S>::new().get()
+}
+struct Nothing;
+impl Store for Nothing {
+    fn should_notify(&self, _old: &Self) -> bool {
+        false
+    }
+    fn new() -> Self {
+        Nothing
+    }
+}
+use std::any::Any;
 impl Condition {
     pub fn check(&self) -> bool {
         use Condition::*;
         match self {
-            Multi(a, b) => a.check() && b.check(),
-            AlltimePoints(p) => attr!(Stats, points) >= *p,
-            AvgPoints(p) => get!(Avg, get_avg) >= *p as f64,
-            PointsOnBoard(p) => get!(UpgradeableBoard, get_points) >= *p,
-            HavePoints(p) => get!(Points, get) >= *p,
-            Harvested(p) => attr!(Stats, largest_harvest) >= *p,
-            BoardSize(_, _) => unimplemented!(),
-            UpgradeDone(upgrade) => get!(Upgrades, is_done, *upgrade),
-            Until(upgrade) => !get!(Upgrades, is_clickable, *upgrade),
-            Between(a, b) => a.check() && !b.check(),
+            // Multi(a, b) => a.check() && b.check(),
+            AlltimePoints(p) => get::<Stats>().points >= *p,
+            AvgPoints(p) => get::<Avg>().get_avg() >= *p as f64,
+            PointsOnBoard(p) => get::<UpgradeableBoard>().get_points() >= *p,
+            HavePoints(p) => get::<Points>().get() >= *p,
+            HaveShuffles(p) => get::<Shuffles>().get() >= *p as f64,
+            Harvested(p) => get::<Stats>().largest_harvest >= *p,
+            BoardSize(x, y) => {
+                let p = get::<UpgradeableBoard>().boardsize();
+                p.x >= *x && p.y >= *y
+            }
+            UpgradeDone(upgrade) => get::<Upgrades>().is_done(*upgrade),
+            Until(upgrade) => !get::<Upgrades>().is_clickable(*upgrade),
+            // Between(a, b) => a.check() && !b.check(),
             Free() => true,
+        }
+    }
+    pub fn watch(&self) -> Box<dyn Any> {
+        use Condition::*;
+        match self {
+            AvgPoints(_) => Box::new(use_store::<Avg>().1),
+            HavePoints(_) => Box::new(use_store::<Points>().1),
+            HaveShuffles(_) => Box::new(use_store::<Shuffles>().1),
+            PointsOnBoard(_) => Box::new(use_store::<UpgradeableBoard>().1),
+            AlltimePoints(_) => Box::new(use_store::<Stats>().1),
+            UpgradeDone(_) => Box::new(use_store::<Upgrades>().1),
+            Until(_) => Box::new(use_store::<Upgrades>().1),
+            BoardSize(_, _) => Box::new(use_store::<UpgradeableBoard>()),
+            Free() => Box::new(Dispatch::<Nothing>::new()),
+            Harvested(_) => Box::new(use_store::<Stats>().1),
         }
     }
     pub fn fulfilled(&self) {
         match self {
             HavePoints(p) => Dispatch::<Points>::new().reduce(|points| points.sub(*p)),
+            HaveShuffles(p) => Dispatch::<Shuffles>::new().reduce_mut(|s| s.sub(*p as f64)),
             // AlltimePoints(_) => {}
             // Harvested(_) => {}
             // BoardSize(_, _) => {}
@@ -163,15 +217,16 @@ impl Display for Condition {
         match self {
             AlltimePoints(p) => write!(f, "Earn a total of {} points", p),
             HavePoints(p) => write!(f, "Requires {} points", p),
+            HaveShuffles(p) => write!(f, "Requires {} shuffles", p),
             Harvested(p) => write!(f, "Harvest a block of at least {} points", p),
             BoardSize(x, y) => write!(f, "Board must by at least {}x{}", x, y),
             AvgPoints(p) => write!(f, "Earn at least {} points per second", p),
             PointsOnBoard(p) => write!(f, "Have {} points on the board", p),
             Free() => write!(f, "Free"),
-            Multi(a, b) => write!(f, "{} AND {}", a, b),
+            // Multi(a, b) => write!(f, "{} AND {}", a, b),
             UpgradeDone(upgrade) => write!(f, "Bought Upgrade \"{}\"", upgrade),
             Until(upgrade) => write!(f, ""),
-            Between(a, b) => write!(f, "{}", a),
+            // Between(a, b) => write!(f, "{}", a),
         }
     }
 }
@@ -191,7 +246,8 @@ pub fn get_upgrades() -> Vec<Upgrade> {
         Upgrade::new(Free(), AlltimePoints(1000), Place(4)).static_(),
         // Harvest
         Upgrade::new(Free(), Free(), Harvest).static_(),
-        Upgrade::new(16, UpgradeAutomove(800), Shuffle).static_(),
+        // Shuffle
+        Upgrade::new(HaveShuffles(1), EnableShuffle, Shuffle).static_(),
         // RESET
         Upgrade::new(Free(), Free(), Reset).static_(),
         // Upgrades
@@ -199,18 +255,25 @@ pub fn get_upgrades() -> Vec<Upgrade> {
         Upgrade::new(AvgPoints(4), Free(), ExtendX(1)),
         Upgrade::new(AvgPoints(8), AvgPoints(6), ExtendX(2)),
         // ExtendY
-        Upgrade::new(PointsOnBoard(256), PointsOnBoard(100), ExtendY(1)),
+        Upgrade::new(PointsOnBoard(256), PointsOnBoard(128), ExtendY(1)),
         Upgrade::new(PointsOnBoard(1024), ExtendY(1), ExtendY(2)),
         // Automation
         Upgrade::new(64, 32, EnableAutomove),
         Upgrade::new(512, EnableAutomove, UpgradeAutomove(800)),
         Upgrade::new(10_000, UpgradeAutomove(800), UpgradeAutomove(500)),
         Upgrade::new(100_000, UpgradeAutomove(500), UpgradeAutomove(250)),
+        Upgrade::new(1_000, UpgradeAutomove(500), EnableShuffle),
         // Upgrade::new(256, 256, "Enable Autoharvesting", EnableAutoHarvest, CostsOnetime),
         // Upgrade::new(1024, 512, "Faster Autoharvesting", UpgradeAutoHarvest, CostsDouble),
         Upgrade::new(16, 8, EnableRandomPlace),
         Upgrade::new(64, EnableRandomPlace, UpgradeRandomPlace(800)),
         Upgrade::new(256, UpgradeRandomPlace(800), UpgradeRandomPlace(500)),
+        // Shuffling
+        Upgrade::new(1_000, UpgradeAutomove(500), EnableShuffle),
+        Upgrade::new(10_000, BoardSize(6,6), AutoShuffle(30000)),
+
+
+
         // Stats and display
         Upgrade::new(AlltimePoints(1000), AlltimePoints(500), ScientificNotation),
         Upgrade::new(12, AlltimePoints(12), EnableStatistics),
@@ -234,6 +297,7 @@ fn reset() {
     Dispatch::<AutoActions>::new().set(Default::default());
     Dispatch::<Upgrades>::new().set(Default::default());
     Dispatch::<Stats>::new().set(Default::default());
+    do_save();
 }
 #[derive(Eq, PartialEq, Copy, Clone, Serialize, Deserialize)]
 pub enum CombineFn {
@@ -326,14 +390,17 @@ impl Upgrade {
         }
     }
     pub fn clickable(&self) -> bool {
-        self.cost.check()
+        self.cost.check() && self.visible()
     }
     pub fn run(&self) {
         // reduce points
         self.cost.fulfilled();
         match self.status {
             UpgradeStatus::Static => {}
-            UpgradeStatus::OneTime => self.done.set(true),
+            UpgradeStatus::OneTime => {
+                self.done.set(true);
+                Dispatch::<Upgrades>::new().reduce(|x| x);
+            }
         }
         // check if it should be remain visible
         // self.visible.set(false);
@@ -371,18 +438,21 @@ macro_rules! save {
 }
 
 fn do_save() {
+    info!("Saving");
     save!(Upgrades);
     save!(Points);
     save!(UpgradeableBoard);
     save!(AutoActions);
     save!(Stats);
+    save!(Shuffles);
 }
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, PartialEq)]
 pub struct AutoActions {
     automove: RefCell<AutoAction>,
     autoharvest: RefCell<AutoAction>,
     random_place: RefCell<AutoAction>,
     autosave: RefCell<AutoAction>,
+    autoshuffle: RefCell<AutoAction>,
 }
 impl AutoActions {
     fn upgrade_automove(&self, time: usize) {
@@ -391,14 +461,20 @@ impl AutoActions {
     fn enable_automove(&self) {
         self.automove.borrow_mut().enable();
     }
+    fn upgrade_autoshuffle(&self, time: usize) {
+        self.autoshuffle.borrow_mut().upgrade(time);
+    }
+    fn enable_autoshuffle(&self) {
+        self.autoshuffle.borrow_mut().enable();
+    }
     fn upgrade_random_place(&self, time: usize) {
         self.random_place.borrow_mut().upgrade(time);
     }
     fn enable_random_place(&self) {
         self.random_place.borrow_mut().enable();
     }
-    fn upgrade_autoharvest(&self) {
-        self.random_place.borrow_mut().upgrade(50);
+    fn upgrade_autoharvest(&self, time: usize) {
+        self.random_place.borrow_mut().upgrade(time);
     }
     fn enable_autoharvest(&self) {
         self.autoharvest.borrow_mut().enable();
@@ -407,39 +483,39 @@ impl AutoActions {
 
 impl Default for AutoActions {
     fn default() -> Self {
-        let a = AutoActions {
+        AutoActions {
             automove: RefCell::new(AutoAction::new(None, Action::AutoMove, 1000, false)),
             autoharvest: RefCell::new(AutoAction::new(None, Action::AutoHarvest, 10000, false)),
             random_place: RefCell::new(AutoAction::new(None, Action::RandomPlace, 1000, false)),
             autosave: RefCell::new(AutoAction::new(None, Action::AutoSave, 5000, true)),
-        };
-        a.autosave.borrow_mut().set_callback();
-        a
+            autoshuffle: RefCell::new(AutoAction::new(None, Action::AutoShuffle, 10000, false)),
+        }
     }
 }
 
 impl Store for AutoActions {
-    fn should_notify(&self, _old: &Self) -> bool {
-        false // ?
+    fn should_notify(&self, old: &Self) -> bool {
+        self != old
     }
     fn new() -> Self {
-       storage::load(storage::Area::Local)
+        let me: Self = storage::load(storage::Area::Local)
             .expect("Unable to load state")
-            .unwrap_or_default()
-        //activate timers
-        // me.automove.borrow_mut().set_callback();
-        // me.autosave.borrow_mut().set_callback();
-        // me.random_place.borrow_mut().set_callback();
-        // me.autoharvest.borrow_mut().set_callback();
-        // me
+            .unwrap_or_default();
+        me.autoshuffle.borrow_mut().set_callback();
+        me.autosave.borrow_mut().set_callback();
+        me.autoharvest.borrow_mut().set_callback();
+        me.automove.borrow_mut().set_callback();
+        me.random_place.borrow_mut().set_callback();
+        me
     }
 }
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, PartialEq)]
 enum Action {
     AutoMove,
     RandomPlace,
     AutoSave,
     AutoHarvest,
+    AutoShuffle,
 }
 #[derive(Serialize, Deserialize)]
 struct AutoAction {
@@ -448,6 +524,11 @@ struct AutoAction {
     action: Action,
     time: usize,
     active: bool,
+}
+impl PartialEq for AutoAction {
+    fn eq(&self, other: &Self) -> bool {
+        self.action == other.action
+    }
 }
 
 impl AutoAction {
@@ -462,7 +543,7 @@ impl AutoAction {
         me
     }
     fn upgrade(&mut self, time: usize) {
-        self.time = time ;
+        self.time = time;
         self.set_callback();
     }
     fn enable(&mut self) {
@@ -481,6 +562,7 @@ impl AutoAction {
                 Action::AutoSave => do_save(),
                 Action::RandomPlace => run!(UpgradeableBoard, random_place, 4),
                 Action::AutoHarvest => run!(UpgradeableBoard, harvest),
+                Action::AutoShuffle => run!(UpgradeableBoard, shuffle),
             };
         });
         self.interval = Some(Interval::new(self.time as u32, move || cb.emit(())));

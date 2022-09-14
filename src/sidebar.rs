@@ -31,6 +31,7 @@ pub fn bar() -> html {
         });
     let onetime = upgrades
         .onetimes()
+        // .filter(|u| !u.done.get())
         .map(|upgrade| {
             html! {
                 <> <UpgradeButton {upgrade}/> </>

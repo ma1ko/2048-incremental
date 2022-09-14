@@ -2,18 +2,27 @@ use yew::prelude::*;
 
 use crate::*;
 
+// macro_rules! watch {
+//     ($a:ident) => {{
+//         match $a {
+//             Condition::HavePoints(usize) => use_store::<Points>(),
+//             Condition::AvgPoints(usize) => use_store::<Stats>(),
+//             _ => unimplemented!()
+//         }
+//     }};
+// }
+
 #[function_component(UpgradeButton)]
 pub fn upgrade_button(props: &Props) -> html {
-    // let index = props.index;
-    let (upgrades, _) = use_store::<Upgrades>(); // for reset
-    // let upgrade = upgrades.upgrades.get(props.index).unwrap();
-    let _  = use_store::<UpgradeableBoard>(); 
-    let _ = use_store::<Stats>(); 
-    let _ = use_store::<Points>(); 
-    let _ = use_store::<AutoActions>(); 
     let upgrade = &props.upgrade;
+    // info!("Rerender"); 
+    let _ = use_store::<Upgrades>();
+    let _ = use_store::<Stats>();
+    let _ = upgrade.show.watch();
+    let _ = upgrade.cost.watch();
+
     if !upgrade.visible() || upgrade.done.get() {
-        return Html::default();
+        return html! { <div> </div> }; // cause yew bug
     }
 
     // let (points, _) = use_store::<Points>();
@@ -33,7 +42,7 @@ pub fn upgrade_button(props: &Props) -> html {
     let upgrade = upgrade.clone();
     let f = if upgrade.clickable() {
         style.push("bg-green-400");
-        Callback::once(move |_| {
+        Callback::from(move |_| {
             upgrade.run();
             // upgrades.upgrades[index].run();
             // Dispatch::<Upgrades>::new().get() // get new state (only required for reset :(
@@ -42,7 +51,6 @@ pub fn upgrade_button(props: &Props) -> html {
         style.push("bg-white");
         Callback::noop()
     };
-
 
     html! {
         <div class="has-tooltip">
