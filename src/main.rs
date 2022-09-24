@@ -1,4 +1,6 @@
 
+mod upgrades;
+mod condition;
 mod points;
 mod maze;
 mod sidebar;
@@ -7,6 +9,8 @@ mod upgrade_button;
 mod upgrade;
 mod stats;
 mod number;
+mod autoaction;
+mod slider;
 
 mod model;
 
@@ -16,12 +20,18 @@ use std::cell::{Cell,RefCell};
 use std::rc::Rc;
 use yewdux::prelude::*;
 use yewdux::storage;
+use std::fmt::Display;
+use std::marker::PhantomData;
 use crate::stats::*;
 use crate::model::*;
 use crate::upgrade::*;
 use crate::number::*;
 use crate::points::*;
 use crate::upgrade_button::*;
+use crate::condition::*;
+use crate::autoaction::*;
+use crate::slider::*;
+use upgrades::*;
 
 use log::info;
 

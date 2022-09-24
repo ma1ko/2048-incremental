@@ -62,9 +62,9 @@ impl Number {
         Number { value: Some(value) }
     }
     pub fn new(value: usize) -> Self {
-        assert!(value >= 2);
+        assert!(value >= 2, "Value is {}", value);
         let x = Number {
-            value: Some(1 << value.trailing_zeros() - 1),
+            value: Some(value.trailing_zeros() as usize),
         };
         // log::info!("{} become 2e{}", value, x.value.unwrap());
         x

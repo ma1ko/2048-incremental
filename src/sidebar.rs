@@ -17,40 +17,64 @@ pub fn points() -> html {
 use crate::stats::*;
 
 #[function_component(SideBar)]
-pub fn bar() -> html {
-    let (upgrades, _) = use_store::<Upgrades>();
-    // let _ = use_store::<Stats>();
-    // let _ = use_store::<UpgradeableBoard>();
-    // let _ = use_store::<Points>();
-    let statics = upgrades
-        .statics()
-        .map(|upgrade| {
-            html! {
-                <> <UpgradeButton {upgrade}/> </>
-            }
-        });
-    let onetime = upgrades
-        .onetimes()
-        // .filter(|u| !u.done.get())
-        .map(|upgrade| {
-            html! {
-                <> <UpgradeButton {upgrade}/> </>
-            }
-        });
+pub fn sidebar() -> html {
+    // return html! {};
+
+    let automoves = html! { <>
+            <DoAutoAction<Automove>/>
+            <DoAutoAction<Autosave>/>
+            <DoAutoAction<Autoplace>/>
+            </>
+    };
+    let statics = html! { <>
+                <UpgradeButton<Place>/>
+                <UpgradeButton<Harvest>/>
+                <UpgradeButton<Reset>/>
+                <UpgradeButton<Shuffle>/>
+                </>
+    };
+    let upgrades = html! { <>
+                <UpgradeButton<ExtendX>/>
+                <UpgradeButton<ExtendY>/>
+                <UpgradeButton<Automove>/>
+                <UpgradeButton<Autoplace>/>
+                <UpgradeButton<Stats>/>
+                <UpgradeButton<BonusTile>/>
+                <UpgradeButton<BonusPoints>/>
+                <UpgradeButton<ScientificNotation>/>
+                <UpgradeButton<SliderPoint>/>
+                // <UpgradeButton<Shuffle>/>
+                <UpgradeButton<AutoShuffle>/>
+                </>
+    };
+    let sliders = html! { <>
+                <Slide<ExtendX>/>
+                <Slide<ExtendY>/>
+                <Slide<Automove>/>
+                <Slide<Autoplace>/> 
+                <Slide<AutoShuffle>/> 
+                </>
+    };
 
     html! {
         <div classes={classes!("float-right", "w-2/6")}>
-            
+        {automoves}
             <ShowPoints/> <br/>
             <div class={classes!("float-left", "w-1/6", "grid-cols-1", "grid-rows-6", "h-1/2")} >
                 <p> {"Actions (Move the Board with WASD):"} </p>
-                {statics.collect::<Html>()}
+                // {statics.collect::<Html>()}
+                {statics}
+
                 <br/>
                 <Statistics/>
             </div>
             <div class={classes!("float-right", "w-1/6", "grid-cols-1", "grid-rows-6", "h-1/2")} >
                 <p> {"Upgrades"} </p>
-                {onetime.collect::<Html>()}
+                {upgrades}
+
+                <p> {"Sliders"} <ShowSliderPoints/> </p>
+                 {sliders}
+
             </div>
         </div>
     }

@@ -20,26 +20,17 @@ impl Display for Points {
 }
 
 impl Points {
-    pub fn sub(&self, points: usize) -> Points {
-        Points {
-            points: self.points - points,
-            cost_fn: self.cost_fn,
-        }
+    pub fn sub(&mut self, points: usize) {
+        self.points -= points;
     }
-    pub fn add(&self, points: usize) -> Points {
+    pub fn add(&mut self, points: usize) {
         let points = self.cost_fn.apply(points);
         let stats = Dispatch::<Stats>::new();
         stats.reduce_mut(|stats| stats.points(points));
-        Points {
-            points: self.points + points,
-            cost_fn: self.cost_fn,
-        }
+        self.points += points;
     }
-    pub fn set_log(&self) -> Points {
-        Points {
-            points: self.points,
-            cost_fn: CostFn::NlogN,
-        }
+    pub fn set_log(&mut self) {
+        self.cost_fn = CostFn::NlogN;
     }
     pub fn get(&self) -> usize {
         self.points
@@ -55,19 +46,50 @@ impl Store for Points {
         self != old
     }
 }
+pub enum BonusType {
+    // Shuffles(i
+
+}
+
+/*
+#[derive(Default,Clone, Serialize, Deserialize, PartialEq)]
+pub struct Bonus {
+    points: Vec<Action>,
+}
+impl Bonus {
+    fn points(&self, amount: usize) {
+
+
+
+    }
+    fn shuffles(&self, amount: usize) {}
+}
+impl Store for Bonus {
+    fn new() -> Self {
+        storage::load(storage::Area::Local)
+            .expect("Unable to load state")
+            .unwrap_or_default()
+    }
+    fn should_notify(&self, old: &Self) -> bool {
+        self != old
+    }
+}
+*/
 
 #[derive(Serialize, Deserialize, Eq, PartialEq, Clone, Debug, Copy)]
 pub enum CostFn {
     Static,
     NlogN,
 }
+
 impl CostFn {
     pub fn apply(&self, points: usize) -> usize {
         let ret = match self {
             CostFn::Static => points,
-            CostFn::NlogN => points * (0usize.leading_zeros() - points.leading_zeros()) as usize,
+            // CostFn::NlogN => points * (0usize.leading_zeros() - points.leading_zeros()) as usize,
+            CostFn::NlogN => (points as f64 * (points as f64).log10()) as usize
         };
-        log::info!("{:?}: Points: {} to {}", self, points, ret);
+        // log::info!("{:?}: Points: {} to {}", self, points, ret);
         ret
     }
 }
@@ -92,7 +114,6 @@ impl Shuffles {
     }
     pub fn sub(&mut self, amount: f64) {
         self.amount -= amount;
-
     }
 }
 

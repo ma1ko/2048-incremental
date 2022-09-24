@@ -13,15 +13,14 @@ use crate::*;
 // }
 
 #[function_component(UpgradeButton)]
-pub fn upgrade_button(props: &Props) -> html {
-    let upgrade = &props.upgrade;
-    // info!("Rerender"); 
-    let _ = use_store::<Upgrades>();
-    let _ = use_store::<Stats>();
+pub fn upgrade_button<T: IsUpgrade>() -> html {
+
+    let (_, dispatch) = use_store::<Upgrade<T>>();
+    let upgrade = dispatch.get();
     let _ = upgrade.show.watch();
     let _ = upgrade.cost.watch();
 
-    if !upgrade.visible() || upgrade.done.get() {
+    if !upgrade.visible() || upgrade.done {
         return html! { <div> </div> }; // cause yew bug
     }
 
@@ -37,13 +36,15 @@ pub fn upgrade_button(props: &Props) -> html {
         "shadow",
         "has-tooltip"
     );
-    let text = format!("{}", upgrade.action.text());
+    let text = format!("{}", upgrade.text);
     let title = format!("{}", upgrade.cost);
     let upgrade = upgrade.clone();
     let f = if upgrade.clickable() {
         style.push("bg-green-400");
-        Callback::from(move |_| {
-            upgrade.run();
+        Callback::from(move |_: MouseEvent| {
+            dispatch.reduce_mut(|upgrade| upgrade.run());
+            // upgrade.run()
+            // upgrade.upgrade();
             // upgrades.upgrades[index].run();
             // Dispatch::<Upgrades>::new().get() // get new state (only required for reset :(
         })
@@ -62,7 +63,7 @@ pub fn upgrade_button(props: &Props) -> html {
     }
 }
 
-#[derive(PartialEq, Properties, Clone)]
-pub struct Props {
-    pub upgrade: Rc<Upgrade>,
-}
+// #[derive(PartialEq, Properties, Clone)]
+// pub struct Props {
+//     pub upgrade: Rc<Upgrade>,
+// }

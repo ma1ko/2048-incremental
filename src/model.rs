@@ -3,6 +3,41 @@ use rand::prelude::SliceRandom;
 
 use crate::sidebar::SideBar;
 
+#[function_component(DisplayBoard)]
+fn display_board() -> html {
+    let (board, _) = use_store::<UpgradeableBoard>();
+    let (x, _) = use_store::<Slider<ExtendX>>();
+    let (y, _) = use_store::<Slider<ExtendY>>();
+    board.set_size(x.current + 4, y.current + 4);
+
+    let board = board.board.borrow();
+    let html: Html = board
+        .points()
+        .map(|index| {
+            html! {<YewField {index}/>}
+        })
+        .collect();
+
+    let cols = format!("grid-cols-{}", board.max.x);
+    let rows = format!("grid-rows-{}", board.max.y);
+    let grid_class = classes!(
+        "bg-black",
+        "float-left",
+        "grid",
+        "gap-2",
+        "h-screen",
+        "w-4/6",
+        cols,
+        rows
+    );
+
+    html! {
+            <div class={grid_class}>
+                {html}
+            </div>
+    }
+}
+
 #[function_component(YewField)]
 fn field(props: &Props) -> html {
     let (board, _) = use_store::<UpgradeableBoard>();
@@ -99,12 +134,7 @@ impl UpgradeableBoard {
             });
     }
     fn calc_points(&self) {
-        let points = self
-            .board
-            .borrow()
-            .iter()
-            .map(|field| field.value())
-            .sum();
+        let points = self.board.borrow().iter().map(|field| field.value()).sum();
         self.points.set(points);
     }
     pub fn boardsize(&self) -> Point {
@@ -119,6 +149,25 @@ impl UpgradeableBoard {
     pub fn scientific_notation(&self) {
         self.scientific_notation.set(true);
     }
+    pub fn set_size(&self, bx: usize, by: usize) {
+        let Point { mut x, mut y } = self.boardsize();
+        while x > bx {
+            x -= 1;
+            self.reduce_x();
+        }
+        while y > by {
+            y -= 1;
+            self.reduce_y();
+        }
+        while x < bx {
+            x += 1;
+            self.extend_x();
+        }
+        while y < by {
+            y += 1;
+            self.extend_y();
+        }
+    }
     pub fn extend_x(&self) {
         let board = &mut self.board.borrow_mut();
         for i in 0..board.max.y {
@@ -126,6 +175,14 @@ impl UpgradeableBoard {
             board.insert(point, Number::none())
         }
         board.max.x += 1;
+    }
+    pub fn reduce_x(&self) {
+        let board = &mut self.board.borrow_mut();
+        for i in 0..board.max.y {
+            let point = Point::new(board.max.x - 1, i);
+            board.board.remove(&point);
+        }
+        board.max.x -= 1;
     }
 
     pub fn extend_y(&self) {
@@ -136,28 +193,66 @@ impl UpgradeableBoard {
         }
         board.max.y += 1;
     }
-    pub fn harvest(&self) {
+    pub fn reduce_y(&self) {
         let board = &mut self.board.borrow_mut();
-        let max = board
-            .board
-            .iter_mut()
-            .max_by(|(_, f1), (_, f2)| f1.value().cmp(&f2.value()));
-        if let Some((_, f)) = max {
-            let value = f.value();
-            // Add points
-            let dispatch = Dispatch::<Points>::new();
-            dispatch.reduce(|points| points.add(value));
-
-            // Update stats
-            let dispatch = Dispatch::<Stats>::new();
-            dispatch.reduce_mut(|stats| stats.harvest(value));
-            // Need to exclude that from stats too
-            let dispatch = Dispatch::<Avg>::new();
-            dispatch.reduce_mut(|avg| avg.harvested(value));
-            // self.points.set(self.points.get() - value);
-            f.set(None);
+        for i in 0..board.max.x {
+            let point = Point::new(i, board.max.y - 1);
+            board.board.remove(&point);
         }
+        board.max.y -= 1;
+    }
+    pub fn harvest_number(&self, num: usize) -> bool {
+        let number = Number::new(num);
+        let found = {
+            let board = &mut self.board.borrow_mut();
+
+            board.iter_mut().any(|field| {
+                if *field == number {
+                    field.set(Some(0));
+                    true
+                } else {
+                    false
+                }
+            })
+        };
+        if found {
+            self.harvest_stats(num);
+            true
+        } else {
+            false
+        }
+    }
+    fn harvest_stats(&self, value: usize) {
+        // Add points
+        let dispatch = Dispatch::<Points>::new();
+        dispatch.reduce_mut(|points| points.add(value));
+
+        // Update stats
+        let dispatch = Dispatch::<Stats>::new();
+        dispatch.reduce_mut(|stats| stats.harvest(value));
+        // Need to exclude that from stats too
+        let dispatch = Dispatch::<Avg>::new();
+        dispatch.reduce_mut(|avg| avg.harvested(value));
+        // self.points.set(self.points.get() - value);
         self.calc_points();
+    }
+    pub fn harvest(&self) {
+        let value = {
+            let board = &mut self.board.borrow_mut();
+            let max = board
+                .board
+                .values_mut()
+                // .iter_mut()
+                .max_by(|f1, f2| f1.value().cmp(&f2.value()));
+            if let Some(f) = max {
+                let value = f.value();
+                f.set(None);
+                value
+            } else {
+                return;
+            }
+        };
+        self.harvest_stats(value);
     }
     pub fn mv(&self) -> usize {
         let points = self
@@ -176,15 +271,14 @@ impl UpgradeableBoard {
         points
     }
     pub fn random_place(&self, number: usize) {
-        // {
         let mut board = self.board.borrow_mut();
         let field = number.into();
         let value = board.random_empty_replace(field);
         self.points.set(self.points.get() + value);
-        // }
-        // self.calc_points();
-        // let dispatch = Dispatch::<Avg>::new();
-        // dispatch.reduce_mut(|avg| avg.manually_added(number));
+    }
+    pub fn contains(&self, number: usize) -> bool {
+        let board = self.board.borrow();
+        board.iter().any(|field| *field == Number::new(number))
     }
 }
 
@@ -208,9 +302,10 @@ impl Component for Model {
     type Properties = ();
 
     fn create(ctx: &Context<Self>) -> Self {
+        register_upgrades();
         // initiates saving state
-        let save = Dispatch::<crate::upgrade::AutoActions>::new();
-        save.reduce(|action| action);
+        // let save = Dispatch::<AutoActions>::new();
+        // save.reduce(|action| action);
 
         let window: web_sys::EventTarget = web_sys::window().unwrap().into();
         let cb = ctx.link().callback(|key| Msg::Key(key));
@@ -253,39 +348,20 @@ impl Component for Model {
     }
 
     /* Grid classes for tailwindcss
-     * grid-cols-4 grid-cols-5 grid-cols-6 grid-cols-7 grid-cols-8 grid-cols-9
-     * grid-rows-4 grid-rows-5 grid-rows-6 grid-rows-7 grid-rows-8 grid-rows-9
+     * grid-cols-4 grid-cols-5 grid-cols-6 grid-cols-7 grid-cols-8 grid-cols-9 grid-cols-10
+     * grid-rows-4 grid-rows-5 grid-rows-6 grid-rows-7 grid-rows-8 grid-rows-9 grid-rows-10
      */
 
     fn view(&self, _ctx: &Context<Self>) -> Html {
         // This gives us a component's "`Scope`" which allows us to send messages, etc to the component.
-        let board = self.board.get();
-        let board = board.board.borrow();
-        let html: Html = board
-            .points()
-            .map(|index| {
-                html! {<YewField {index}/>}
-            })
-            .collect();
+        // let board = self.board.get();
+        // let board = board.board.borrow();
 
-        let cols = format!("grid-cols-{}", board.max.x);
-        let rows = format!("grid-rows-{}", board.max.y);
-        let grid_class = classes!(
-            "bg-black",
-            "float-left",
-            "grid",
-            "gap-2",
-            "h-screen",
-            "w-4/6",
-            cols,
-            rows
-        );
         html! {
             <body class={classes!("float-root", "h-full")}>
 
-            <div class={grid_class}>
-                {html}
-            </div>
+            <DisplayBoard/>
+
             <SideBar/>
 
             </body>

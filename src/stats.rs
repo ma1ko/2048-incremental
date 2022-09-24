@@ -29,6 +29,12 @@ impl Store for Stats {
         self != old
     }
 }
+impl IsUpgrade for Stats {
+    fn run(_level: usize) {
+        Dispatch::<Stats>::new().reduce_mut(|s| s.enable());
+    }
+
+}
 
 #[function_component(Statistics)]
 pub fn statistics() -> html {
