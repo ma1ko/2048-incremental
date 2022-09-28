@@ -54,6 +54,7 @@ impl Store for Sliders {
                 (ExtendY, Slider::new(ExtendY, "Extend Y")),
                 (AutoMove, Slider::new(AutoMove, "Automove")),
                 (RandomPlace, Slider::new(RandomPlace, "Auto place number")),
+                (AutoShuffle, Slider::new(AutoShuffle, "Autoshuffle")),
             ]
             .into(),
         }
@@ -64,9 +65,14 @@ impl Store for Sliders {
 }
 
 impl Sliders {
-    fn get(&self, t: &UpgradeType) -> &Mrc<Slider> {
+    pub fn get(&self, t: &UpgradeType) -> &Mrc<Slider> {
         let slider = self.sliders.get(t).expect(&format!("Slider {:?} doesn't exist", t));
         slider
+    }
+    pub fn run(&self, t: &UpgradeType) {
+        let slider = self.sliders.get(t).expect(&format!("Slider {:?} doesn't exist", t));
+        t.run(slider.borrow().current);
+
     }
 }
 impl Index<&UpgradeType> for Sliders {

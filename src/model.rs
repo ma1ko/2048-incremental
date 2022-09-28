@@ -213,7 +213,7 @@ impl UpgradeableBoard {
 
             board.iter_mut().any(|field| {
                 if *field == number {
-                    field.set(Some(0));
+                    field.set(None);
                     true
                 } else {
                     false
@@ -247,7 +247,6 @@ impl UpgradeableBoard {
             let max = board
                 .board
                 .values_mut()
-                // .iter_mut()
                 .max_by(|f1, f2| f1.value().cmp(&f2.value()));
             if let Some(f) = max {
                 let value = f.value();
@@ -265,17 +264,18 @@ impl UpgradeableBoard {
             .borrow_mut()
             .play_random(self.combine_fn.get().into());
         // self.points.set(self.points.get() + points);
-        self.random_place(4);
+        // self.random_place(4);
     }
     fn play(&self, direction: Direction) {
         self
             .board
             .borrow_mut()
             .play(direction, self.combine_fn.get().into());
-        let points = self.random_place(4);
-        Dispatch::<Avg>::new().reduce_mut(|avg| {
-            avg.manually_added(points);
-        });
+        // let points = self.random_place(4);
+        // Dispatch::<Sliders>::new().get().run(&RandomPlace);
+        // Dispatch::<Avg>::new().reduce_mut(|avg| {
+        //     avg.manually_added(points);
+        // });
     }
     pub fn random_place(&self, number: usize) -> usize {
         let mut board = self.board.borrow_mut();
@@ -291,10 +291,6 @@ impl UpgradeableBoard {
     }
 }
 
-#[function_component(Main)]
-fn ui() -> Html {
-    html! {}
-}
 
 pub struct Model {
     board: Dispatch<UpgradeableBoard>,

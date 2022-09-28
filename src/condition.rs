@@ -43,6 +43,7 @@ pub fn use_store_(c: &Condition) {
     if c.equals(&AlltimePoints(0)) && (use_store::<Stats>().0.points == 0) {}
     if c.equals(&AvgPoints(0)) && (use_store::<Avg>().type_id() == 0.type_id()) {}
     if c.equals(&UpgradeDone(Place)) && (use_store::<Upgrades>().type_id() == 0.type_id()) {}
+    if c.equals(&NumberOnBoard(0)) && (use_store::<UpgradeableBoard>().type_id() == 0.type_id()) {}
 }
 impl Condition {
     pub fn equals(&self, c: &Condition) -> bool {
@@ -53,6 +54,8 @@ impl Condition {
             (Harvested(_), Harvested(_)) => true,
             (AlltimePoints(_), AlltimePoints(_)) => true,
             (AvgPoints(_), AvgPoints(_)) => true,
+            (UpgradeDone(_), UpgradeDone(_)) => true,
+            (NumberOnBoard(_), NumberOnBoard(_)) => true,
             _ => false,
         }
     }
@@ -82,7 +85,7 @@ impl Condition {
             HavePoints(p) => Dispatch::<Points>::new().reduce_mut(|points| points.sub(*p)),
             HaveShuffles(p) => Dispatch::<Shuffles>::new().reduce_mut(|s| s.sub(*p as f64)),
             NumberOnBoard(i) => {
-                Dispatch::<UpgradeableBoard>::new().get().harvest_number(*i);
+                Dispatch::<UpgradeableBoard>::new().reduce(|board| { board.harvest_number(*i); board});
                 // Dispatch::<SliderPoints>::new().reduce_mut(|p| p.add(1))
             }
             // AlltimePoints(_) => {}

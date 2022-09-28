@@ -1,4 +1,3 @@
-
 use crate::*;
 
 use gloo::timers::callback::Interval;
@@ -40,78 +39,7 @@ pub fn do_save() {
     // save!(Shuffles);
     // save!(Bonus);
 }
-// #[derive(Serialize, Deserialize, PartialEq)]
-// pub struct AutoActions {
-//     automove: RefCell<AutoAction>,
-//     autoharvest: RefCell<AutoAction>,
-//     random_place: RefCell<AutoAction>,
-//     autosave: RefCell<AutoAction>,
-//     autoshuffle: RefCell<AutoAction>,
-// }
-// impl AutoActions {
-//     pub fn upgrade_automove(&self, time: usize) {
-//         self.automove.borrow_mut().upgrade(time);
-//     }
-//     pub fn enable_automove(&self) {
-//         self.automove.borrow_mut().enable();
-//     }
-//     pub fn upgrade_autoshuffle(&self, time: usize) {
-//         self.autoshuffle.borrow_mut().upgrade(time);
-//     }
-//     pub fn enable_autoshuffle(&self) {
-//         self.autoshuffle.borrow_mut().enable();
-//     }
-//     pub fn upgrade_random_place(&self, time: usize) {
-//         self.random_place.borrow_mut().upgrade(time);
-//     }
-//     pub fn enable_random_place(&self) {
-//         self.random_place.borrow_mut().enable();
-//     }
-//     pub fn upgrade_autoharvest(&self, time: usize) {
-//         self.random_place.borrow_mut().upgrade(time);
-//     }
-//     pub fn enable_autoharvest(&self) {
-//         self.autoharvest.borrow_mut().enable();
-//     }
-// }
 
-// impl Default for AutoActions {
-//     fn default() -> Self {
-//         AutoActions {
-//             automove: RefCell::new(AutoAction::new(None, Action::AutoMove, 1000, false)),
-//             autoharvest: RefCell::new(AutoAction::new(None, Action::AutoHarvest, 10000, false)),
-//             random_place: RefCell::new(AutoAction::new(None, Action::RandomPlace, 1000, false)),
-//             autosave: RefCell::new(AutoAction::new(None, Action::AutoSave, 5000, true)),
-//             autoshuffle: RefCell::new(AutoAction::new(None, Action::AutoShuffle, 10000, false)),
-//         }
-//     }
-// }
-
-// impl Store for AutoActions {
-//     fn should_notify(&self, old: &Self) -> bool {
-//         self != old
-//     }
-//     fn new() -> Self {
-//         let me: Self = storage::load(storage::Area::Local)
-//             .expect("Unable to load state")
-//             .unwrap_or_default();
-//         me.autoshuffle.borrow_mut().set_callback();
-//         me.autosave.borrow_mut().set_callback();
-//         me.autoharvest.borrow_mut().set_callback();
-//         me.automove.borrow_mut().set_callback();
-//         me.random_place.borrow_mut().set_callback();
-//         me
-//     }
-// }
-// #[derive(Clone, Serialize, Deserialize, PartialEq)]
-// enum Action {
-//     AutoMove,
-//     RandomPlace,
-//     AutoSave,
-//     AutoHarvest,
-//     AutoShuffle,
-// }
-//
 #[derive(Serialize, Deserialize, Clone)]
 pub struct AutoActions {
     actions: HashMap<UpgradeType, Mrc<AutoAction>>,
@@ -122,6 +50,7 @@ impl Store for AutoActions {
             actions: [
                 (AutoMove, AutoAction::new(AutoMove, 1000, false)),
                 (RandomPlace, AutoAction::new(RandomPlace, 1000, false)),
+                (AutoShuffle, AutoAction::new(AutoShuffle, 10000, false)),
                 (AutoSave, AutoAction::new(AutoSave, 1000, true)),
             ]
             .into(),
@@ -146,44 +75,30 @@ impl Index<&UpgradeType> for AutoActions {
 
 #[derive(Serialize, Deserialize)]
 pub struct AutoAction {
-    #[serde(skip)]
-    interval: Option<Interval>,
-    // action: Action,
-    time: usize,
+    // #[serde(skip)]
+    // interval: Option<Interval>,
+    current: usize,
+    max: usize,
     active: bool,
+    initial: usize,
     t: UpgradeType,
 }
-
-// impl Default for AutoAction {
-//     fn default() -> Self {
-//         AutoAction::<T>::new(1000, false)
-//     }
-// }
-// impl<T: IsUpgrade> Clone for AutoAction<T> {
-//     fn clone(&self) -> Self {
-//         Self {
-//             interval: None,
-//             time: self.time,
-//             t: self.t,
-//             active: self.active,
-//         }
-//     }
-// }
 
 impl AutoAction {
     pub fn new(t: UpgradeType, time: usize, active: bool) -> Mrc<Self> {
         let mut me = Self {
-            interval: None,
-            // action: f,
-            time,
+            // interval: None,
+            max: time,
+            current: time,
             active,
             t,
+            initial: time,
         };
         me.set_callback(0);
         Mrc::new(me)
     }
     fn upgrade(&mut self, time: usize, level: usize) {
-        self.time = time;
+        self.max = time;
         self.set_callback(level);
     }
     fn enable(&mut self, level: usize) {
@@ -192,19 +107,19 @@ impl AutoAction {
     }
     fn disable(&mut self) {
         self.active = false;
-        self.interval = None;
+        // self.interval = None;
     }
     fn set_callback(&mut self, level: usize) {
         if !self.active {
             return;
         }
 
-        let t = self.t;
-        let cb = Callback::from(move |_| {
-            // Dispatch::<Upgrades>::new().get().run(t, );
-            t.run(level);
-        });
-        self.interval = Some(Interval::new(self.time as u32, move || cb.emit(())));
+        // let t = self.t;
+        // let cb = Callback::from(move |_| {
+        //     // Dispatch::<Upgrades>::new().get().run(t, );
+        //     t.run(level);
+        // });
+        // self.interval = Some(Interval::new(self.max as u32, move || cb.emit(())));
     }
 }
 
@@ -220,7 +135,10 @@ pub fn show_auto_actions() -> Html {
         if action_type == AutoSave {
             html! {}
         } else {
-            html! {<DoAutoAction {action_type}/>}
+            html! {<>
+                <DoAutoAction {action_type}/>
+                <ShowCountdown {action_type}/>
+            </>}
         }
     });
 
@@ -245,56 +163,29 @@ pub fn do_auto_action(props: &Props) -> Html {
     } else {
         // info!("Setting {:?}, to {}", action_type, slider.current);
         action.active = true;
-        action.time = 1000 - slider.current;
+        action.max = (action.initial as f64 / (1.2f64).powf(slider.current as f64)) as usize;
         action.set_callback(slider.current);
     }
 
     html! {}
 }
 
-/*
-#[derive(Clone)]
-struct Countdown<T: IsUpgrade> {
-    current: usize,
-    max: usize,
-    t: PhantomData<T>,
-}
-impl<T: IsUpgrade> Countdown<T> {
-    fn reset(&mut self) {
-        self.current = self.max;
-    }
-    fn step(&mut self) -> usize {
-        if self.current == 0 {
-            return 0;
-        }
-        self.current -= 10;
-        self.current
-    }
-}
-
-
-impl<T: IsUpgrade> Store for Countdown<T> {
-    fn new() -> Self {
-        Countdown {
-            current: 0,
-            max:0,
-            t: PhantomData
-
-        }
-        // Default::default()
-
-
-    }
-    fn should_notify(&self, old: &Self) -> bool {
-        true
-    }
-}
-
 #[function_component(ShowCountdown)]
-pub fn countdown<T: IsUpgrade>() -> Html {
-    let (action, _) = use_store::<AutoAction<T>>();
-    let (countdown, dp) = use_store::<Countdown<T>>();
-    // let time = dp.reduce_mut(|c| c.step());
-    html! {}
+pub fn countdown(props: &Props) -> Html {
+    let t = props.action_type;
+    let _ = use_store::<Timer>();
+    let dispatch = Dispatch::<AutoActions>::new().get();
+    let mut action = dispatch[&t].borrow_mut();
+    if !action.active {
+        return html! {};
+    }
+    if action.current <= 100 {
+        Dispatch::<Sliders>::new().get().run(&t);
+        action.current = action.max;
+    } else {
+        action.current -= 100;
+    }
+    html! {
+        <p> {format!("{:?}:", action.t)} {action.current} {"/"} {action.max} </p>
+    }
 }
-*/

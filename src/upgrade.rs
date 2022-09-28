@@ -6,7 +6,7 @@ use std::marker::PhantomData;
 
 macro_rules! run {
     ($a:ident, $b:ident) => {{
-        log::info!("Running ",);
+        // log::info!("Running ",);
         let dispatch = Dispatch::<$a>::new();
         dispatch.reduce(|state| {
             state.$b();
@@ -43,21 +43,16 @@ pub enum UpgradeCosts {
 
 #[derive(Clone, Copy, PartialEq, Serialize, Deserialize, Debug, Hash, Eq, PartialOrd, Ord)]
 pub enum UpgradeType {
-    // Slider(SliderType),
-    // Shuffle,
+    SliderPoint,
     AutoShuffle,
     Shuffle,
-    // Shuffle,
     Place,
     ExtendX,
     ExtendY,
     AutoMove,
     AutoSave,
-    // UpgradeAutomove,
     AutoHarvest,
-    // UpgradeAutoHarvest,
     RandomPlace,
-    // UpgradeRandomPlace,
     Reset,
     Harvest,
     ScientificNotation,
@@ -72,20 +67,23 @@ impl UpgradeType {
     pub fn run(&self, level: usize) {
         match self {
             EnableStatistics => Dispatch::<Stats>::new().reduce_mut(|s| s.enable()),
-            Place => run!(UpgradeableBoard, random_place, 2 << (level - 1)),
+            // Place => run!(UpgradeableBoard, random_place, 2 << (level - 1)),
+            Place => Dispatch::<Sliders>::new().get().run(&RandomPlace),
             Harvest => run!(UpgradeableBoard, harvest),
-            AutoMove => run!(UpgradeableBoard, mv),
             RandomPlace => run!(UpgradeableBoard, random_place, 2 << (level)),
             ScientificNotation => run!(UpgradeableBoard, scientific_notation),
             BonusTile => run!(UpgradeableBoard, set_combine_fn, CombineFn::Bonus(64, 16)),
             Reset => reset(),
             AutoSave => do_save(),
+            AutoMove => run!(UpgradeableBoard, mv),
+            AutoShuffle => run!(UpgradeableBoard, shuffle),
+            SliderPoint => Dispatch::<SliderPoints>::new().reduce_mut(|p| p.add(1)),
             _ => {}
         }
     }
 }
 
-
+/*
 fn board(f: &dyn Fn(&UpgradeableBoard)) {
     run::<UpgradeableBoard>(f)
 }
@@ -97,8 +95,7 @@ fn run<S: Store>(f: &dyn Fn(&S)) {
         dispatch
     });
 }
-
-
+*/
 
 fn enable_stats() {
     Dispatch::<Stats>::new().reduce_mut(|stats| stats.enable());
@@ -212,14 +209,14 @@ impl Store for Upgrades {
                 // Onetime upgrades
                 Upgrade::new(
                     ExtendX,
+                    PointsOnBoard(64),
                     PointsOnBoard(32),
-                    PointsOnBoard(16),
-                    "ExtendX Slider",
+                    "extend board horizontally",
                 )
-                .multiply(4)
+                .multiply(8)
                 .build(),
-                Upgrade::new(ExtendY, 16, 32, "Extend Y")
-                    .multiply(4)
+                Upgrade::new(ExtendY, 64, 32, "extend board vertically")
+                    .multiply(8)
                     .build(),
                 Upgrade::new(AutoMove, 32, Free(), "Automove")
                     .multiply(2)
@@ -230,7 +227,7 @@ impl Store for Upgrades {
                     Harvested(16),
                     "Place random number",
                 )
-                .multiply(2)
+                .multiply(4)
                 .build(),
                 Upgrade::new(
                     ScientificNotation,
@@ -248,6 +245,14 @@ impl Store for Upgrades {
                 .build(),
                 Upgrade::new(EnableStatistics, 128, 32, "Show Statistics").build(),
                 Upgrade::new(BonusTile, Harvested(16), Harvested(16), "Bonus Tile").build(),
+                Upgrade::new(
+                    SliderPoint,
+                    NumberOnBoard(4),
+                    NumberOnBoard(2),
+                    "Get a point",
+                )
+                .multiply(2)
+                .build(),
             ]
             .into(),
         }

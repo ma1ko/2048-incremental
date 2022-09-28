@@ -75,7 +75,6 @@ pub fn sidebar() -> Html {
 
     html! {
         <div classes={classes!("float-right", "w-2/6")}>
-            <ShowAutoActions/>
             <ShowPoints/> <br/>
             <div class={classes!("float-left", "w-1/6", "grid-cols-1", "grid-rows-6", "h-1/2")} >
                 <p> {"Actions (Move the Board with WASD):"} </p>
@@ -91,6 +90,7 @@ pub fn sidebar() -> Html {
 
                 <p> {"Sliders"} <ShowSliderPoints/> </p>
                  {sliders}
+            <ShowAutoActions/>
 
             </div>
         </div>

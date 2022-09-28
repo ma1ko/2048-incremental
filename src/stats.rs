@@ -52,7 +52,7 @@ pub fn statistics() -> Html {
         </div>
     }
 }
-struct Timer {
+pub struct Timer {
     _interval: Interval,
 }
 impl Timer {}
