@@ -1,4 +1,3 @@
-use std::marker::PhantomData;
 
 use crate::*;
 
@@ -112,51 +111,76 @@ pub fn do_save() {
 //     AutoHarvest,
 //     AutoShuffle,
 // }
-#[derive(Serialize, Deserialize)]
-pub struct AutoAction<T: IsUpgrade> {
-    #[serde(skip)]
-    interval: Option<Interval>,
-    // action: Action,
-    time: usize,
-    active: bool,
-    t: PhantomData<*const T>,
+//
+#[derive(Serialize, Deserialize, Clone)]
+pub struct AutoActions {
+    actions: HashMap<UpgradeType, Mrc<AutoAction>>,
 }
-
-impl<T: IsUpgrade> Store for AutoAction<T> {
+impl Store for AutoActions {
     fn new() -> Self {
-        Default::default()
+        Self {
+            actions: [
+                (AutoMove, AutoAction::new(AutoMove, 1000, false)),
+                (RandomPlace, AutoAction::new(RandomPlace, 1000, false)),
+                (AutoSave, AutoAction::new(AutoSave, 1000, true)),
+            ]
+            .into(),
+        }
     }
     fn should_notify(&self, _old: &Self) -> bool {
         true
     }
 }
-impl<T: IsUpgrade> Default for AutoAction<T> {
-    fn default() -> Self {
-        AutoAction::<T>::new(1000, false)
+impl AutoActions {
+    fn get(&self, t: &UpgradeType) -> &Mrc<AutoAction> {
+        let action = self.actions.get(t).unwrap();
+        action
     }
 }
-impl<T: IsUpgrade> Clone for AutoAction<T> {
-    fn clone(&self) -> Self {
-        Self {
-            interval: None,
-            time: self.time,
-            t: self.t,
-            active: self.active,
-        }
+impl Index<&UpgradeType> for AutoActions {
+    type Output = Mrc<AutoAction>;
+    fn index(&self, index: &UpgradeType) -> &Self::Output {
+        self.get(index)
     }
 }
 
-impl<T: IsUpgrade> AutoAction<T> {
-    pub fn new(time: usize, active: bool) -> Self {
+#[derive(Serialize, Deserialize)]
+pub struct AutoAction {
+    #[serde(skip)]
+    interval: Option<Interval>,
+    // action: Action,
+    time: usize,
+    active: bool,
+    t: UpgradeType,
+}
+
+// impl Default for AutoAction {
+//     fn default() -> Self {
+//         AutoAction::<T>::new(1000, false)
+//     }
+// }
+// impl<T: IsUpgrade> Clone for AutoAction<T> {
+//     fn clone(&self) -> Self {
+//         Self {
+//             interval: None,
+//             time: self.time,
+//             t: self.t,
+//             active: self.active,
+//         }
+//     }
+// }
+
+impl AutoAction {
+    pub fn new(t: UpgradeType, time: usize, active: bool) -> Mrc<Self> {
         let mut me = Self {
             interval: None,
             // action: f,
             time,
             active,
-            t: PhantomData,
+            t,
         };
         me.set_callback(0);
-        me
+        Mrc::new(me)
     }
     fn upgrade(&mut self, time: usize, level: usize) {
         self.time = time;
@@ -175,36 +199,60 @@ impl<T: IsUpgrade> AutoAction<T> {
             return;
         }
 
-        // let action = self.action.clone();
+        let t = self.t;
         let cb = Callback::from(move |_| {
-            T::run(level);
+            // Dispatch::<Upgrades>::new().get().run(t, );
+            t.run(level);
         });
         self.interval = Some(Interval::new(self.time as u32, move || cb.emit(())));
     }
 }
+
+#[derive(Properties, PartialEq)]
+pub struct Props {
+    action_type: UpgradeType,
+}
+#[function_component(ShowAutoActions)]
+pub fn show_auto_actions() -> Html {
+    let dispatch = Dispatch::<AutoActions>::new().get();
+
+    let html = dispatch.actions.keys().cloned().map(|action_type| {
+        if action_type == AutoSave {
+            html! {}
+        } else {
+            html! {<DoAutoAction {action_type}/>}
+        }
+    });
+
+    html.collect()
+}
+
 #[function_component(DoAutoAction)]
-pub fn do_auto_action<T: IsUpgrade>() -> html {
-    let (slider, _) = use_store::<Slider<T>>();
-    let dispatch = Dispatch::<AutoAction<T>>::new();
+pub fn do_auto_action(props: &Props) -> Html {
+    let action_type = props.action_type.clone();
+    let action = use_selector(move |actions: &AutoActions| actions[&action_type].clone());
+    // Slider Controlling us
+    let slider = use_selector(move |sliders: &Sliders| sliders[&action_type].clone());
+    let slider = slider.as_ref().borrow_mut();
+    let mut action = action.as_ref().borrow_mut();
 
     if !slider.enabled() {
         return html! {};
     }
     if slider.current == 0 {
-        dispatch.reduce_mut(|auto| {
-            auto.disable();
-        });
+        // info!("Disable {:?}, ", action_type);
+        action.disable();
     } else {
-        dispatch.reduce_mut(|auto| {
-            auto.active = true;
-            auto.time = 1000 - slider.current;
-            auto.set_callback(slider.current);
-        });
+        // info!("Setting {:?}, to {}", action_type, slider.current);
+        action.active = true;
+        action.time = 1000 - slider.current;
+        action.set_callback(slider.current);
     }
 
     html! {}
 }
 
+/*
 #[derive(Clone)]
 struct Countdown<T: IsUpgrade> {
     current: usize,
@@ -243,9 +291,10 @@ impl<T: IsUpgrade> Store for Countdown<T> {
 }
 
 #[function_component(ShowCountdown)]
-pub fn countdown<T: IsUpgrade>() -> html {
+pub fn countdown<T: IsUpgrade>() -> Html {
     let (action, _) = use_store::<AutoAction<T>>();
     let (countdown, dp) = use_store::<Countdown<T>>();
     // let time = dp.reduce_mut(|c| c.step());
     html! {}
 }
+*/

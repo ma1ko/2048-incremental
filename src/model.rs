@@ -4,10 +4,15 @@ use rand::prelude::SliceRandom;
 use crate::sidebar::SideBar;
 
 #[function_component(DisplayBoard)]
-fn display_board() -> html {
+fn display_board() -> Html {
     let (board, _) = use_store::<UpgradeableBoard>();
-    let (x, _) = use_store::<Slider<ExtendX>>();
-    let (y, _) = use_store::<Slider<ExtendY>>();
+    // let (x, _) = use_store::<Slider<ExtendX>>();
+    let (_, sliders) = use_store::<Sliders>();
+    let sliders = sliders.get();
+    let x = sliders[&ExtendX].borrow();
+    let y = sliders[&ExtendY].borrow();
+
+    // let (y, _) = use_store::<Slider<ExtendY>>();
     board.set_size(x.current + 4, y.current + 4);
 
     let board = board.board.borrow();
@@ -39,7 +44,7 @@ fn display_board() -> html {
 }
 
 #[function_component(YewField)]
-fn field(props: &Props) -> html {
+fn field(props: &Props) -> Html {
     let (board, _) = use_store::<UpgradeableBoard>();
     let board = board.board.borrow();
     let number = board.board.get(&props.index).unwrap();
@@ -254,27 +259,31 @@ impl UpgradeableBoard {
         };
         self.harvest_stats(value);
     }
-    pub fn mv(&self) -> usize {
-        let points = self
+    pub fn mv(&self) {
+        self
             .board
             .borrow_mut()
             .play_random(self.combine_fn.get().into());
-        self.points.set(self.points.get() + points);
-        points
+        // self.points.set(self.points.get() + points);
+        self.random_place(4);
     }
-    fn play(&self, direction: Direction) -> usize {
-        let points = self
+    fn play(&self, direction: Direction) {
+        self
             .board
             .borrow_mut()
             .play(direction, self.combine_fn.get().into());
-        self.points.set(self.points.get() + points);
-        points
+        let points = self.random_place(4);
+        Dispatch::<Avg>::new().reduce_mut(|avg| {
+            avg.manually_added(points);
+        });
     }
-    pub fn random_place(&self, number: usize) {
+    pub fn random_place(&self, number: usize) -> usize {
         let mut board = self.board.borrow_mut();
         let field = number.into();
         let value = board.random_empty_replace(field);
         self.points.set(self.points.get() + value);
+        value
+
     }
     pub fn contains(&self, number: usize) -> bool {
         let board = self.board.borrow();
@@ -283,7 +292,7 @@ impl UpgradeableBoard {
 }
 
 #[function_component(Main)]
-fn ui() -> html {
+fn ui() -> Html {
     html! {}
 }
 
@@ -302,7 +311,7 @@ impl Component for Model {
     type Properties = ();
 
     fn create(ctx: &Context<Self>) -> Self {
-        register_upgrades();
+        // register_upgrades();
         // initiates saving state
         // let save = Dispatch::<AutoActions>::new();
         // save.reduce(|action| action);
@@ -333,13 +342,9 @@ impl Component for Model {
                     40 | 83 => Direction::Down,
                     _ => Direction::Nowhere,
                 };
-                let mut points = 0;
                 self.board.reduce(|board| {
-                    points = board.play(direction);
+                    board.play(direction);
                     board
-                });
-                Dispatch::<Avg>::new().reduce_mut(|avg| {
-                    avg.manually_added(points);
                 });
             }
             Msg::Board(_board) => { /* Board has changed, redraw it */ }
@@ -369,9 +374,3 @@ impl Component for Model {
     }
 }
 
-// fn main() {
-//     wasm_logger::init(wasm_logger::Config::default());
-//     yew::start_app::<Model>();
-//     log::info!("starting");
-//     // twentyfourtyeight::main();
-// }

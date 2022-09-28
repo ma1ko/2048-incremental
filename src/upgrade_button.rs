@@ -1,30 +1,34 @@
+use std::borrow::BorrowMut;
+
 use yew::prelude::*;
 
 use crate::*;
 
-// macro_rules! watch {
-//     ($a:ident) => {{
-//         match $a {
-//             Condition::HavePoints(usize) => use_store::<Points>(),
-//             Condition::AvgPoints(usize) => use_store::<Stats>(),
-//             _ => unimplemented!()
-//         }
-//     }};
-// }
+
+#[derive(Properties, PartialEq)]
+pub struct Props {
+    pub upgrade_type: UpgradeType,
+}
 
 #[function_component(UpgradeButton)]
-pub fn upgrade_button<T: IsUpgrade>() -> html {
-
-    let (_, dispatch) = use_store::<Upgrade<T>>();
-    let upgrade = dispatch.get();
-    let _ = upgrade.show.watch();
-    let _ = upgrade.cost.watch();
-
+pub fn upgrade_button(props: &Props) -> Html {
+    // info!("I am {:?}", props.upgrade_type);
+    let upgrade_type = props.upgrade_type;
+    let upgrade = use_selector(move |upgrades: &Upgrades| upgrades[&upgrade_type].clone());
+    let upgrade = upgrade.as_ref().borrow();
+    let _ = use_store_(&upgrade.show);
+    let _ = use_store_(&upgrade.cost);
+    let onclick = Callback::from(move |_: MouseEvent| {
+        Dispatch::<Upgrades>::new().reduce(|u| {
+            u[&upgrade_type].borrow_mut().upgrade();
+            u[&upgrade_type].borrow().run();
+            u
+        });
+    });
     if !upgrade.visible() || upgrade.done {
         return html! { <div> </div> }; // cause yew bug
     }
 
-    // let (points, _) = use_store::<Points>();
     let mut style = classes!(
         "text-gray-800",
         "font-semibold",
@@ -41,13 +45,7 @@ pub fn upgrade_button<T: IsUpgrade>() -> html {
     let upgrade = upgrade.clone();
     let f = if upgrade.clickable() {
         style.push("bg-green-400");
-        Callback::from(move |_: MouseEvent| {
-            dispatch.reduce_mut(|upgrade| upgrade.run());
-            // upgrade.run()
-            // upgrade.upgrade();
-            // upgrades.upgrades[index].run();
-            // Dispatch::<Upgrades>::new().get() // get new state (only required for reset :(
-        })
+        onclick
     } else {
         style.push("bg-white");
         Callback::noop()
@@ -63,7 +61,3 @@ pub fn upgrade_button<T: IsUpgrade>() -> html {
     }
 }
 
-// #[derive(PartialEq, Properties, Clone)]
-// pub struct Props {
-//     pub upgrade: Rc<Upgrade>,
-// }

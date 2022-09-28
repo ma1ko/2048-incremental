@@ -29,15 +29,9 @@ impl Store for Stats {
         self != old
     }
 }
-impl IsUpgrade for Stats {
-    fn run(_level: usize) {
-        Dispatch::<Stats>::new().reduce_mut(|s| s.enable());
-    }
-
-}
 
 #[function_component(Statistics)]
-pub fn statistics() -> html {
+pub fn statistics() -> Html {
     let (stats, _) = use_store::<Stats>();
     let  _ = use_store::<Timer>();
     let points_on_board = Dispatch::<UpgradeableBoard>::new().get().points.get();

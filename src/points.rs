@@ -129,7 +129,7 @@ impl Store for Shuffles {
 }
 
 #[function_component(ShowShuffles)]
-pub fn show_shuffles() -> html {
+pub fn show_shuffles() -> Html {
     let (shuffles, _) = use_store::<Shuffles>();
 
     if !shuffles.enabled {

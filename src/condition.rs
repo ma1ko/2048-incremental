@@ -1,16 +1,7 @@
 use crate::*;
 
-// impl From<Action> for Condition {
-//     fn from(u: Action) -> Self {
-//         UpgradeDone(u)
-//     }
-// }
-// impl From<UpgradeType> for Box<Condition> {
-//     fn from(u: UpgradeType) -> Self {
-//         Box::new(UpgradeDone(u))
-//     }
-// }
-#[derive(PartialEq, Clone, Serialize, Deserialize, Debug,Eq)]
+
+#[derive(PartialEq, Clone, Serialize, Deserialize, Debug, Eq)]
 pub enum Condition {
     AlltimePoints(usize),
     HavePoints(usize),
@@ -21,12 +12,12 @@ pub enum Condition {
     PointsOnBoard(usize),
     Free(),
     // Multi(Box<Condition>, Box<Condition>),
-    // UpgradeDone(Action),
+    UpgradeDone(UpgradeType),
     // Until(Action),
     Between(Box<Condition>, Box<Condition>),
     NumberOnBoard(usize),
 }
-use Condition::*;
+pub use Condition::*;
 struct Nothing;
 impl Store for Nothing {
     fn should_notify(&self, _old: &Self) -> bool {
@@ -41,7 +32,30 @@ use std::any::Any;
 fn get<S: Store>() -> Rc<S> {
     Dispatch::<S>::new().get()
 }
+
+// conditional subscribe to updates (very hacky...)
+#[hook]
+pub fn use_store_(c: &Condition) {
+    if c.equals(&HavePoints(0)) && (use_store::<Points>().0.get() == 0) {}
+    if c.equals(&PointsOnBoard(0)) && (use_store::<UpgradeableBoard>().0.type_id() == 0.type_id()) {
+    }
+    if c.equals(&Harvested(0)) && (use_store::<Stats>().0.points == 0) {}
+    if c.equals(&AlltimePoints(0)) && (use_store::<Stats>().0.points == 0) {}
+    if c.equals(&AvgPoints(0)) && (use_store::<Avg>().type_id() == 0.type_id()) {}
+    if c.equals(&UpgradeDone(Place)) && (use_store::<Upgrades>().type_id() == 0.type_id()) {}
+}
 impl Condition {
+    pub fn equals(&self, c: &Condition) -> bool {
+        match (self, c) {
+            (HavePoints(_), HavePoints(_)) => true,
+            (PointsOnBoard(_), PointsOnBoard(_)) => true,
+            (Free(), Free()) => true,
+            (Harvested(_), Harvested(_)) => true,
+            (AlltimePoints(_), AlltimePoints(_)) => true,
+            (AvgPoints(_), AvgPoints(_)) => true,
+            _ => false,
+        }
+    }
     pub fn check(&self) -> bool {
         use Condition::*;
         match self {
@@ -56,30 +70,11 @@ impl Condition {
                 let p = get::<UpgradeableBoard>().boardsize();
                 p.x >= *x && p.y >= *y
             }
-            // UpgradeDone(upgrade) => get::<Upgrades>().is_done(*upgrade),
+            UpgradeDone(upgrade) => get::<Upgrades>().is_done(*upgrade),
             // Until(upgrade) => !get::<Upgrades>().is_clickable(*upgrade),
             Between(a, b) => a.check() && !b.check(),
             Free() => true,
-            NumberOnBoard(i) => get::<UpgradeableBoard>().contains(*i)
-        }
-    }
-    pub fn watch(&self) -> Box<dyn Any> {
-        use Condition::*;
-        match self {
-            NumberOnBoard(_) => Box::new(use_store::<UpgradeableBoard>().1),
-            AvgPoints(_) => Box::new(use_store::<Avg>().1),
-            HavePoints(_) => Box::new(use_store::<Points>().1),
-            HaveShuffles(_) => Box::new(use_store::<Shuffles>().1),
-            PointsOnBoard(_) => Box::new(use_store::<UpgradeableBoard>().1),
-            AlltimePoints(_) => Box::new(use_store::<Stats>().1),
-            // UpgradeDone(_) => Box::new(use_store::<Upgrades>().1),
-            // UpgradeDone(_) => Box::new(use_store::<Nothing>().1),
-            // Until(_) => Box::new(use_store::<Upgrades>().1),
-            // Until(_) => Box::new(use_store::<Nothing>().1),
-            BoardSize(_, _) => Box::new(use_store::<UpgradeableBoard>()),
-            Free() => Box::new(Dispatch::<Nothing>::new()),
-            Harvested(_) => Box::new(use_store::<Stats>().1),
-            Between(a, b) => Box::new((a.watch(), b.watch())),
+            NumberOnBoard(i) => get::<UpgradeableBoard>().contains(*i),
         }
     }
     pub fn fulfilled(&self) {
@@ -89,7 +84,6 @@ impl Condition {
             NumberOnBoard(i) => {
                 Dispatch::<UpgradeableBoard>::new().get().harvest_number(*i);
                 // Dispatch::<SliderPoints>::new().reduce_mut(|p| p.add(1))
-
             }
             // AlltimePoints(_) => {}
             // Harvested(_) => {}
@@ -108,7 +102,6 @@ impl Condition {
             Free() => Free(),
             NumberOnBoard(i) => NumberOnBoard(i * 2),
             // UpgradeDone(i) => UpgradeDone(*i),
-
             _ => panic!("Didn't double {:?}", self),
         }
     }
@@ -125,7 +118,7 @@ impl std::fmt::Display for Condition {
             PointsOnBoard(p) => write!(f, "Have {} points on the board", p),
             Free() => write!(f, "Free"),
             // Multi(a, b) => write!(f, "{} AND {}", a, b),
-            // UpgradeDone(upgrade) => write!(f, "Requires other upgrade first"),
+            UpgradeDone(_upgrade) => write!(f, "Requires other upgrade first"),
             // Until(_) => write!(f, ""),
             Between(a, _) => write!(f, "{}", a),
             NumberOnBoard(i) => write!(f, "Harvest a {}", i),

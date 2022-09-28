@@ -1,4 +1,3 @@
-
 use crate::maze::Direction::*;
 use crate::maze::*;
 use crate::*;
@@ -90,9 +89,15 @@ pub fn _main() {
     }
 }
 impl Board<Number> {
+    pub fn has_empty(&self) -> bool {
+        self.board.values().any(|f| f.value.is_none())
+    }
     pub fn random_empty_replace(&mut self, new_field: Number) -> usize {
-        // Timeout in case we're full
-        for _ in 0..10 {
+        if !self.has_empty() {
+            // board is full
+            return 0;
+        }
+        loop {
             let point = Point::random(self.max.x, self.max.y);
             if let Some(field) = self.board.get(&point) {
                 if field.is_none() {
@@ -101,37 +106,35 @@ impl Board<Number> {
                 }
             }
         }
-        return 0;
     }
-    pub fn play_random(&mut self, f: Box<CombineFn>) -> usize {
+    pub fn play_random(&mut self, f: Box<CombineFn>) {
         let mut rng = rand::thread_rng();
         let dir: Direction = rng.gen_range(0..4).into();
         self.play(dir, f)
     }
-    pub fn play(&mut self, direction: Direction, f: Box<CombineFn>) -> usize {
+    pub fn play(&mut self, direction: Direction, f: Box<CombineFn>) {
         let change = match direction {
             Left => iter_board(self.rows_mut(), f),
             Right => iter_board(self.rows_mut_rev(), f),
             Down => iter_board(self.columns_mut_rev(), f),
             Up => iter_board(self.columns_mut(), f),
-            Nowhere => return 0,
+            Nowhere => return ,
         };
 
-        if !change {
-            return 0;
-        }
-        if self.iter().all(|field| field.is_some()) {
-            // log::info!("You lost");
-            return 0;
-        }
+        // if !change {
+        //     return 0;
+        // }
+        // if self.iter().all(|field| field.is_some()) {
+        //     // log::info!("You lost");
+        //     return 0;
+        // }
         // spawn random 2
-        loop {
-            let p = Point::random(self.max.x, self.max.y);
-            if self.board.get(&p).unwrap().is_none() {
-                self.board.insert(p, 2.into());
-                return 2;
-            }
-        }
+        // loop {
+        //     let p = Point::random(self.max.x, self.max.y);
+        //     if self.board.get(&p).unwrap().is_none() {
+        //         self.board.insert(p, 2.into());
+        //         return 2;
+        //     }
+        // }
     }
 }
-

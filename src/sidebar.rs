@@ -5,7 +5,7 @@ use yewdux::prelude::*;
 use crate::*;
 
 #[function_component(ShowPoints)]
-pub fn points() -> html {
+pub fn points() -> Html {
     let (points, _) = use_store::<Points>();
 
     html! {
@@ -17,15 +17,30 @@ pub fn points() -> html {
 use crate::stats::*;
 
 #[function_component(SideBar)]
-pub fn sidebar() -> html {
+pub fn sidebar() -> Html {
     // return html! {};
 
     let automoves = html! { <>
+
+        /*
             <DoAutoAction<Automove>/>
             <DoAutoAction<Autosave>/>
             <DoAutoAction<Autoplace>/>
+            */
             </>
     };
+    let upgrades = Dispatch::<Upgrades>::new().get();
+    let statics = upgrades.statics().map(|upgrade| {
+        let upgrade_type = upgrade.borrow().t;
+        html! {<UpgradeButton {upgrade_type}/>}
+
+    });
+    let upgrades = upgrades.onetime().map(|upgrade| {
+        let upgrade_type = upgrade.borrow().t;
+        html! {<UpgradeButton {upgrade_type}/>}
+
+    });
+    /*
     let statics = html! { <>
                 <UpgradeButton<Place>/>
                 <UpgradeButton<Harvest>/>
@@ -47,30 +62,32 @@ pub fn sidebar() -> html {
                 <UpgradeButton<AutoShuffle>/>
                 </>
     };
+    */
     let sliders = html! { <>
-                <Slide<ExtendX>/>
-                <Slide<ExtendY>/>
-                <Slide<Automove>/>
-                <Slide<Autoplace>/> 
-                <Slide<AutoShuffle>/> 
+                <ShowSliders/>
+                // <Slide<ExtendX>/>
+                // <Slide<ExtendY>/>
+                // <Slide<Automove>/>
+                // <Slide<Autoplace>/> 
+                // <Slide<AutoShuffle>/> 
                 </>
     };
 
     html! {
         <div classes={classes!("float-right", "w-2/6")}>
-        {automoves}
+            <ShowAutoActions/>
             <ShowPoints/> <br/>
             <div class={classes!("float-left", "w-1/6", "grid-cols-1", "grid-rows-6", "h-1/2")} >
                 <p> {"Actions (Move the Board with WASD):"} </p>
                 // {statics.collect::<Html>()}
-                {statics}
+                {statics.collect::<Vec<_>>()}
 
                 <br/>
                 <Statistics/>
             </div>
             <div class={classes!("float-right", "w-1/6", "grid-cols-1", "grid-rows-6", "h-1/2")} >
                 <p> {"Upgrades"} </p>
-                {upgrades}
+                {upgrades.collect::<Vec<_>>()}
 
                 <p> {"Sliders"} <ShowSliderPoints/> </p>
                  {sliders}

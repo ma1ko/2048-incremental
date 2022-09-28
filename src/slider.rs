@@ -1,10 +1,12 @@
+use std::ops::Index;
+
 use crate::*;
 
 #[derive(Default, PartialEq, Clone, Debug, Deserialize, Serialize)]
 pub struct SliderPoints {
     points: usize,
 }
-impl Display for SliderPoints{
+impl Display for SliderPoints {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.points)
     }
@@ -22,17 +24,16 @@ impl SliderPoints {
 }
 impl Store for SliderPoints {
     fn new() -> Self {
-         storage::load(storage::Area::Local)
+        storage::load(storage::Area::Local)
             .expect("Unable to load state")
             .unwrap_or_default()
     }
     fn should_notify(&self, _old: &Self) -> bool {
         true
     }
-
 }
 #[function_component(ShowSliderPoints)]
-pub fn points() -> html {
+pub fn points() -> Html {
     let (points, _) = use_store::<SliderPoints>();
     html! {
         <div>
@@ -41,36 +42,59 @@ pub fn points() -> html {
     }
 }
 
-use std::marker::PhantomData;
+#[derive(Serialize, Deserialize, Clone)]
+pub struct Sliders {
+    sliders: HashMap<UpgradeType, Mrc<Slider>>,
+}
+impl Store for Sliders {
+    fn new() -> Self {
+        Self {
+            sliders: [
+                (ExtendX, Slider::new(ExtendX, "Extend X")),
+                (ExtendY, Slider::new(ExtendY, "Extend Y")),
+                (AutoMove, Slider::new(AutoMove, "Automove")),
+                (RandomPlace, Slider::new(RandomPlace, "Auto place number")),
+            ]
+            .into(),
+        }
+    }
+    fn should_notify(&self, _old: &Self) -> bool {
+        true
+    }
+}
 
-// #[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
-#[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
-pub struct Slider<T: IsUpgrade> {
+impl Sliders {
+    fn get(&self, t: &UpgradeType) -> &Mrc<Slider> {
+        let slider = self.sliders.get(t).expect(&format!("Slider {:?} doesn't exist", t));
+        slider
+    }
+}
+impl Index<&UpgradeType> for Sliders {
+    type Output = Mrc<Slider>;
+    fn index(&self, index: &UpgradeType) -> &Self::Output {
+        self.get(index)
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
+pub struct Slider {
     // action: SliderType,
     pub current: usize,
     max: usize,
     text: String,
-    pub t: PhantomData<*const T>,
+    t: UpgradeType,
 }
-impl<T: IsUpgrade> Clone for Slider<T> {
-    fn clone(&self) -> Self {
-        Self {
-            t: self.t,
-            text: self.text.clone(),
-            ..*self
-        }
-    }
-}
-impl<T: IsUpgrade> Slider<T> {
-    pub fn new<S: Into<String>>(text: S) -> Self {
-        Slider {
+
+impl Slider {
+    pub fn new<S: Into<String>>(t: UpgradeType, text: S) -> Mrc<Self> {
+        Mrc::new(Slider {
             current: 0,
             max: 0,
-            t: PhantomData,
             text: text.into(),
-        }
+            t,
+        })
     }
-    pub fn _upgrade(&mut self) {
+    pub fn upgrade(&mut self) {
         // info!("Increasing");
         self.max += 1;
     }
@@ -92,38 +116,46 @@ impl<T: IsUpgrade> Slider<T> {
         }
     }
 }
-impl<T: IsUpgrade> Store for Slider<T> {
-    fn new() -> Self {
-        Default::default()
-    }
-    fn should_notify(&self, old: &Self) -> bool {
-        true
-    }
-}
-impl<T: IsUpgrade> Default for Slider<T> {
-    fn default() -> Self {
-        Slider::<T>::new(format!("Unimplemented {}", std::any::type_name::<T>()))
-    }
+#[derive(Properties, PartialEq)]
+pub struct Props {
+    slider_type: UpgradeType,
 }
 
-#[function_component(Slide)]
-pub fn slide<T: IsUpgrade>() -> html {
-    let (slider, dispatch) = use_store::<Slider<T>>();
-    let (upgrade, _) = use_store::<Upgrade<T>>();
+#[function_component(ShowSliders)]
+pub fn slide() -> Html {
+    let dispatch = Dispatch::<Sliders>::new().get();
+
+    let html = dispatch.sliders.keys().cloned().map(|slider_type| {
+        html! {<ShowSlider {slider_type}/>}
+    });
+
+    html.collect()
+}
+#[function_component(ShowSlider)]
+pub fn show_slider(props: &Props) -> Html {
+    let slider_type = props.slider_type;
+    let slider = use_selector(move |sliders: &Sliders| sliders[&slider_type].clone());
+    let mut slider = slider.as_ref().borrow_mut();
+    let upgrade = use_selector(move |u: &Upgrades| u[&slider_type].clone());
+    let upgrade = upgrade.as_ref().borrow();
+
     if upgrade.level != slider.max {
-        dispatch.reduce_mut(|s| s.max = upgrade.level);
+        slider.max = upgrade.level;
     }
-    // info!("Slider");
     if slider.max == 0 {
         return html! {<div> </div>};
     }
-    // let max = slider.max.to_string();
-    // let value = slider.current.to_string();
-    let decrease = Callback::from(|_| {
-        Dispatch::<Slider<T>>::new().reduce_mut(|s| s.decrease());
+    let decrease = Callback::from(move |_| {
+        Dispatch::<Sliders>::new().reduce(|s| {
+            s[&slider_type].borrow_mut().decrease();
+            s
+        });
     });
-    let increase = Callback::from(|_| {
-        Dispatch::<Slider<T>>::new().reduce_mut(|s| s.increase());
+    let increase = Callback::from(move |_| {
+        Dispatch::<Sliders>::new().reduce(|s| {
+            s[&slider_type].borrow_mut().increase();
+            s
+        });
     });
     let mut class = classes!(
         "text-gray-800",
@@ -150,10 +182,8 @@ pub fn slide<T: IsUpgrade>() -> html {
     <p>
         <p> {format!("{}", {slider.text.clone()})} </p>
         {dec_button}
-        // <input type="range" min=0 {max} {value} class="slider"/>
         {slider.current}
         {inc_button}
-        // <button {class} onclick={increase}>{" + "}</button>
     </p >
     }
 }

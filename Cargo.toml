@@ -6,22 +6,28 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-console = "0.15.0"
-itertools = "0.10.3"
-rand = {version = "0.8.5" }
-getrandom = { version = "0.2", features = ["js"] }
-yew = "0.19.3"
+console = "0.15.1"
+itertools = "0.10.5"
+rand = "0.8.5"
+getrandom = { version = "0.2.7", features = ["js"] }
+# yew = "0.19.3"
 wasm-logger = "0.2.0"
 log = "0.4.17"
-web-sys = "0.3.59"
-wasm-bindgen = "0.2.82"
-yewdux = "0.8.2"
-serde = {version = "1.0.144", features = ["derive", "rc"]}
+web-sys = "0.3.60"
+wasm-bindgen = "0.2.83"
+# yewdux = "0.8.2"
+serde = { version = "1.0.145", features = ["derive", "rc"] }
 gloo = "0.8.0"
 wee_alloc = "0.4.5"
+serde_with = "2.0.1"
+strum = "0.24.1"
+strum_macros = "0.24.3"
+gloo-storage = "0.2.2"
+yewdux = {git = "https://github.com/intendednull/yewdux" }
+yew = {git = "https://github.com/yewstack/yew", features=["csr"] }
+
 [target.'cfg(target_arch = "x86_64")'.dependencies]
 termion = "1.5.6"
 
-
-[profile.release]
-lto = true
+#[profile.release]
+#lto = true
