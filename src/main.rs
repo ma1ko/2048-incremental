@@ -22,7 +22,6 @@ use yewdux::prelude::*;
 use yewdux::mrc::Mrc;
 use yewdux::storage;
 use std::fmt::Display;
-use std::marker::PhantomData;
 use std::collections::HashMap;
 
 
@@ -37,7 +36,6 @@ use crate::autoaction::*;
 use crate::slider::*;
 
 use log::info;
-use yew::Renderer;
 use std::ops::Index;
 
 #[global_allocator]

@@ -1,12 +1,11 @@
 [package]
-name = "leet"
+name = "twentyfourtyeight-incremental"
 version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-console = "0.15.1"
 itertools = "0.10.5"
 rand = "0.8.5"
 getrandom = { version = "0.2.7", features = ["js"] }
@@ -19,15 +18,13 @@ wasm-bindgen = "0.2.83"
 serde = { version = "1.0.145", features = ["derive", "rc"] }
 gloo = "0.8.0"
 wee_alloc = "0.4.5"
-serde_with = "2.0.1"
-strum = "0.24.1"
-strum_macros = "0.24.3"
+#serde_with = "2.0.1"
+#strum = "0.24.1"
+#strum_macros = "0.24.3"
 gloo-storage = "0.2.2"
 yewdux = {git = "https://github.com/intendednull/yewdux" }
 yew = {git = "https://github.com/yewstack/yew", features=["csr"] }
 
-[target.'cfg(target_arch = "x86_64")'.dependencies]
-termion = "1.5.6"
 
 #[profile.release]
 #lto = true

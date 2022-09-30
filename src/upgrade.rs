@@ -1,8 +1,7 @@
 use crate::model::UpgradeableBoard;
 use crate::*;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 use std::fmt::Display;
-use std::marker::PhantomData;
 
 macro_rules! run {
     ($a:ident, $b:ident) => {{
@@ -77,7 +76,8 @@ impl UpgradeType {
             AutoSave => {
                 Timeout::new(1, move || {
                     do_save();
-                }).forget();
+                })
+                .forget();
             }
             AutoMove => run!(UpgradeableBoard, mv),
             AutoShuffle => run!(UpgradeableBoard, shuffle),

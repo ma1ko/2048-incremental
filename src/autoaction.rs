@@ -1,6 +1,5 @@
 use crate::*;
 
-use gloo::timers::callback::Interval;
 use yewdux::storage::Area::Local;
 macro_rules! save {
     ($a:ident) => {
@@ -84,8 +83,6 @@ impl Index<&UpgradeType> for AutoActions {
 
 #[derive(Serialize, Deserialize)]
 pub struct AutoAction {
-    // #[serde(skip)]
-    // interval: Option<Interval>,
     current: usize,
     max: usize,
     active: bool,
@@ -95,40 +92,23 @@ pub struct AutoAction {
 
 impl AutoAction {
     pub fn new(t: UpgradeType, time: usize, active: bool) -> Mrc<Self> {
-        let mut me = Self {
-            // interval: None,
+        let me = Self {
             max: time,
             current: time,
             active,
             t,
             initial: time,
         };
-        me.set_callback(0);
         Mrc::new(me)
     }
     fn upgrade(&mut self, time: usize, level: usize) {
         self.max = time;
-        self.set_callback(level);
     }
     fn enable(&mut self, level: usize) {
         self.active = true;
-        self.set_callback(level);
     }
     fn disable(&mut self) {
         self.active = false;
-        // self.interval = None;
-    }
-    fn set_callback(&mut self, level: usize) {
-        if !self.active {
-            return;
-        }
-
-        // let t = self.t;
-        // let cb = Callback::from(move |_| {
-        //     // Dispatch::<Upgrades>::new().get().run(t, );
-        //     t.run(level);
-        // });
-        // self.interval = Some(Interval::new(self.max as u32, move || cb.emit(())));
     }
 }
 
@@ -141,16 +121,10 @@ pub fn show_auto_actions() -> Html {
     let dispatch = Dispatch::<AutoActions>::new().get();
 
     let html = dispatch.actions.keys().cloned().map(|action_type| {
-        // if action_type == AutoSave {
-        //     html! {
-        //         <ShowCountdown {action_type}/>
-        //     }
-        // } else {
         html! {<>
             <DoAutoAction {action_type}/>
             <ShowCountdown {action_type}/>
         </>}
-        // }
     });
 
     html.collect()
@@ -169,13 +143,10 @@ pub fn do_auto_action(props: &Props) -> Html {
         return html! {};
     }
     if slider.current == 0 {
-        // info!("Disable {:?}, ", action_type);
         action.disable();
     } else {
-        // info!("Setting {:?}, to {}", action_type, slider.current);
         action.active = true;
         action.max = (action.initial as f64 / (1.2f64).powf(slider.current as f64)) as usize;
-        action.set_callback(slider.current);
     }
 
     html! {}
@@ -193,15 +164,11 @@ pub fn countdown(props: &Props) -> Html {
     if action.current <= 100 {
         action.current = action.max;
         // create a callback to avoid borrowing issues
-        Callback::from(move |_| {
+
             Dispatch::<Sliders>::new().get().run(&t);
-        }).emit(0);
     } else {
         action.current -= 100;
     }
-    // if action.t == AutoSave {
-    //     Default::default()
-    // } else {
     html! {
         <p> {format!("{:?}:", action.t)} {action.current} {"/"} {action.max} </p>
     }

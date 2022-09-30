@@ -1,32 +1,13 @@
 #![allow(dead_code)]
-use std::collections::HashSet;
 use std::{collections::HashMap, fmt::Display};
 
-use console::Key;
 use rand::Rng;
-fn main() {
-    let max = Point::new(50, 20);
-    let mut board: Board<Field> = Board::new(max);
-    for i in 0..max.x {
-        for j in 0..max.y {
-            board.board.insert(Point::new(i, j), Field::new(Point::new(i, j)));
-        }
-    }
 
-    board.aldous_broder();
-    println!("{}", board);
-
-    let mut rng = rand::thread_rng();
-    let p = Point::new(rng.gen_range(0..10), rng.gen_range(0..10));
-    board.visit(p, 0);
-    println!("{}", board.longest_path);
-    println!("{}", board);
-}
-
-impl Serialize for Point{
+impl Serialize for Point {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-        where
-            S: serde::Serializer {
+    where
+        S: serde::Serializer,
+    {
         serializer.serialize_str(&format!("{},{}", self.x, self.y))
     }
 }
@@ -41,34 +22,35 @@ impl<'de> Visitor<'de> for PointVisitor {
         formatter.write_str("it crashed!!!")
     }
     fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
-        where
-            E: de::Error, {
-           let (x,y) = v.split_once(',').unwrap();
-                Ok((x.parse::<usize>().unwrap(), y.parse::<usize>().unwrap()))
-
+    where
+        E: de::Error,
+    {
+        let (x, y) = v.split_once(',').unwrap();
+        Ok((x.parse::<usize>().unwrap(), y.parse::<usize>().unwrap()))
     }
 }
 impl<'de> Deserialize<'de> for Point {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-        where
-            D: serde::Deserializer<'de> {
+    where
+        D: serde::Deserializer<'de>,
+    {
         let res = deserializer.deserialize_str(PointVisitor)?;
-        Ok(Point{x: res.0, y: res.1})
+        Ok(Point { x: res.0, y: res.1 })
     }
-
 }
 #[derive(PartialEq, Eq, Debug, Hash, Copy, Clone, Properties)]
-pub struct Point{pub x: usize, pub y: usize}
+pub struct Point {
+    pub x: usize,
+    pub y: usize,
+}
 
 impl Point {
     pub fn random(max_x: usize, max_y: usize) -> Point {
         let mut rng = rand::thread_rng();
         Point::new(rng.gen_range(0..max_x), rng.gen_range(0..max_y))
-
     }
     pub fn new(x: usize, y: usize) -> Point {
-        Point {x,y}
-
+        Point { x, y }
     }
     pub fn right(self) -> Self {
         Point::new(self.x + 1, self.y)
@@ -99,103 +81,20 @@ use serde::{Deserialize, Serialize};
 pub struct Board<T> {
     pub board: HashMap<Point, T>,
     pub max: Point,
-    longest_path: usize,
 }
-impl Board<Field> {
-    pub fn visit(&mut self, p: Point, mut steps: usize) {
-        let current = self.board.remove(&p);
-        if let Some(mut current) = current {
-            if current.steps == 0 || current.steps >= steps {
-                current.steps = steps;
-                self.longest_path = self.longest_path.max(steps);
-                steps = steps + 1;
-                if !current.wall.contains(&Down) {
-                    self.visit(p.left(), steps);
-                }
-                if let Some(x) = self.board.get(&p.right()) {
-                    if !x.wall.contains(&Down) {
-                        self.visit(p.right(), steps);
-                    }
-                }
-                if !current.wall.contains(&Right) {
-                    self.visit(p.up(), steps);
-                }
-                if let Some(x) = self.board.get(&p.down()) {
-                    if !x.wall.contains(&Right) {
-                        self.visit(p.down(), steps);
-                    }
-                }
-            }
-            self.board.insert(p, current);
-        }
-    }
-    pub fn aldous_broder(&mut self) {
-        let mut rng = rand::thread_rng();
-        let mut left = self.iter().count();
-        let mut p = Point::new(rng.gen_range(0..10), rng.gen_range(0..10));
-        let mut current = self.board.remove(&p).unwrap();
 
-        while left > 0 {
-            if !current.visited {
-                current.visited = true;
-                left -= 1;
-            }
-            let direction: Direction = rng.gen_range(0..4).into();
-            let new_p = p.go(direction);
-            if let Some(mut new) = self.board.remove(&new_p) {
-                if !new.visited {
-                    // new.path.insert(direction);
-                    // current.path.insert(direction.opposite());
-                    match direction {
-                        Left => {
-                            // Left, rem down
-                            self.board
-                                .get_mut(&current.p.down())
-                                .map(|f| f.wall.remove(&Up));
-                            current.wall.remove(&Down);
-                        }
-                        Right => {
-                            // right
-                            new.wall.remove(&Down);
-                            self.board
-                                .get_mut(&new.p.down())
-                                .map(|f| f.wall.remove(&Up));
-                            // current.right = false;
-                        }
-                        Up => {
-                            // up
-                            self.board
-                                .get_mut(&current.p.right())
-                                .map(|f| f.wall.remove(&Left));
-                            current.wall.remove(&Right);
-                        }
-                        Down => {
-                            // down
-                            self.board
-                                .get_mut(&new.p.right())
-                                .map(|f| f.wall.remove(&Left));
-                            new.wall.remove(&Right);
-                        }
-                        Nowhere => panic!("Can't move nowhere"),
-                    }
-                }
-                self.board.insert(p, current);
-                current = new;
-                p = new_p;
-            }
-        }
-        self.board.insert(p, current);
-    }
-}
 impl<T: 'static> Board<T> {
     pub fn insert(&mut self, point: Point, v: T) {
         self.board.insert(point, v);
     }
-    pub fn points(&self) -> impl Iterator<Item=Point> + '_ {
-        let mut p = Point::new(0,0);
-        let f = std::iter::from_fn(move || { 
+    pub fn points(&self) -> impl Iterator<Item = Point> + '_ {
+        let mut p = Point::new(0, 0);
+        let f = std::iter::from_fn(move || {
             let ret = p;
-            if self.board.get(&ret).is_some() { p = p.right(); return Some(ret) }
+            if self.board.get(&ret).is_some() {
+                p = p.right();
+                return Some(ret);
+            }
             if self.board.get(&Point::new(0, p.y + 1)).is_some() {
                 let ret = Point::new(0, p.y + 1);
                 p = ret.right();
@@ -207,7 +106,6 @@ impl<T: 'static> Board<T> {
         f
         // unimplemented!()
         // BoardIter::new(self, Box::new(f), Point::new(0, 0))
-
     }
     pub fn iter(&self) -> BoardIter<'_, T> {
         let f = |p: Point, board: &Board<T>| {
@@ -262,7 +160,8 @@ impl<T: 'static> Board<T> {
         let me = self as *mut Self;
         while let Some(_) = self.board.get(&Point::new(0, y)) {
             let me = unsafe { &mut *me };
-            let iter = BoardIterMut::new(me, Box::new(|p, _| p.left()), Point::new(self.max.x - 1, y));
+            let iter =
+                BoardIterMut::new(me, Box::new(|p, _| p.left()), Point::new(self.max.x - 1, y));
             rows.push(iter);
             y += 1;
         }
@@ -299,7 +198,8 @@ impl<T: 'static> Board<T> {
 
         while let Some(_) = self.board.get(&Point::new(x, 0)) {
             let me = unsafe { &mut *me };
-            let iter = BoardIterMut::new(me, Box::new(|p, _| p.up()), Point::new(x, self.max.y - 1));
+            let iter =
+                BoardIterMut::new(me, Box::new(|p, _| p.up()), Point::new(x, self.max.y - 1));
             columns.push(iter);
             x += 1;
         }
@@ -310,7 +210,6 @@ impl<T: 'static> Board<T> {
         Board {
             max,
             board: HashMap::new(),
-            longest_path: 0,
         }
     }
     fn get(&self, p: &Point) -> Option<&T> {
@@ -390,22 +289,6 @@ impl Direction {
         }
     }
 }
-use console::Key::*;
-impl From<Key> for Direction {
-    fn from(k: Key) -> Self {
-        match k {
-            ArrowUp => Up,
-            ArrowDown => Down,
-            ArrowLeft => Left,
-            ArrowRight => Right,
-            Char('w') => Up,
-            Char('a') => Left,
-            Char('s') => Down,
-            Char('d') => Right,
-            _ => Nowhere,
-        }
-    }
-}
 
 impl From<usize> for Direction {
     fn from(x: usize) -> Self {
@@ -416,61 +299,5 @@ impl From<usize> for Direction {
             3 => Down,
             _ => panic!("Not a direction"),
         }
-    }
-}
-struct Field {
-    steps: usize,
-    visited: bool,
-    p: Point,
-    wall: HashSet<Direction>,
-    // path: HashSet<Direction>,
-}
-impl Field {
-    fn new(p: Point) -> Self {
-        Field {
-            p,
-            wall: HashSet::from([Left, Right, Up, Down]),
-            // path: HashSet::from([]),
-            visited: false,
-            steps: 0,
-        }
-    }
-}
-impl Display for Field {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let wall = &self.wall;
-        write!(
-            f,
-            "\u{001b}[48;2;{};00;{}m",
-            self.steps,
-            (self.steps * 50).min(50)
-        )?;
-        match (
-            wall.contains(&Left),
-            wall.contains(&Up),
-            wall.contains(&Right),
-            wall.contains(&Down),
-        ) {
-            (true, true, true, true) => write!(f, "╬"),
-            (false, true, true, true) => write!(f, "╠"),
-            (true, false, true, true) => write!(f, "╦"),
-            (true, true, false, true) => write!(f, "╣"),
-            (true, true, true, false) => write!(f, "╩"),
-
-            (true, true, false, false) => write!(f, "╝"),
-            (true, false, true, false) => write!(f, "═"),
-            (true, false, false, true) => write!(f, "╗"),
-            (false, true, true, false) => write!(f, "╚"),
-            (false, true, false, true) => write!(f, "║"),
-            (false, false, true, true) => write!(f, "╔"),
-
-            (true, false, false, false) => write!(f, "╴"),
-            (false, true, false, false) => write!(f, "╵"),
-            (false, false, true, false) => write!(f, "╶"),
-            (false, false, false, true) => write!(f, "╷"),
-            (false, false, false, false) => write!(f, "x"),
-            // _ => write!(f, " "),
-        }?;
-        write!(f, "\u{001b}[48;2;00;00;00m")
     }
 }
