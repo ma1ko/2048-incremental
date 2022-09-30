@@ -33,11 +33,14 @@ impl Store for Stats {
 #[function_component(Statistics)]
 pub fn statistics() -> Html {
     let (stats, _) = use_store::<Stats>();
-    let  _ = use_store::<Timer>();
+    let _ = use_store::<Timer>();
     let points_on_board = Dispatch::<UpgradeableBoard>::new().get().points.get();
 
     if !stats.enable {
-        return html! {};
+        return html! {
+            // calculate but don't show yet
+            <CalcAverage/>
+        };
     }
     html! {
         <div>
@@ -46,7 +49,8 @@ pub fn statistics() -> Html {
        <p> {"Points: "} {stats.points} </p>
        <p> {"Largest Harvest: "} {stats.largest_harvest} </p>
        <p> {"Points on the board: "} {points_on_board} </p>
-       <Average/>
+       <CalcAverage/>
+       <ShowAverage/>
        <ShowShuffles/>
 
         </div>
@@ -114,13 +118,20 @@ impl Store for Avg {
     }
 }
 
-#[function_component(Average)]
+#[function_component(CalcAverage)]
+fn average() -> Html {
+    let (_, _) = use_store::<Timer>();
+    let dispatch = Dispatch::<Avg>::new();
+    dispatch.reduce_mut(|avg| avg.avg());
+    html! {}
+}
+
+#[function_component(ShowAverage)]
 fn average() -> Html {
     let (_, _) = use_store::<Timer>();
     // let stats = Dispatch::<Stats>::new();
 
     let dispatch = Dispatch::<Avg>::new();
-    dispatch.reduce_mut(|avg| avg.avg());
     let avg = dispatch.get().get_avg();
     html! {
         <p>

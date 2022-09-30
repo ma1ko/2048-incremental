@@ -74,10 +74,15 @@ impl UpgradeType {
             ScientificNotation => run!(UpgradeableBoard, scientific_notation),
             BonusTile => run!(UpgradeableBoard, set_combine_fn, CombineFn::Bonus(64, 16)),
             Reset => reset(),
-            AutoSave => do_save(),
+            AutoSave => {
+                Timeout::new(1, move || {
+                    do_save();
+                }).forget();
+            }
             AutoMove => run!(UpgradeableBoard, mv),
             AutoShuffle => run!(UpgradeableBoard, shuffle),
             SliderPoint => Dispatch::<SliderPoints>::new().reduce_mut(|p| p.add(1)),
+            NlogNCost => Dispatch::<Points>::new().reduce_mut(Points::set_log),
             _ => {}
         }
     }
@@ -100,6 +105,7 @@ fn run<S: Store>(f: &dyn Fn(&S)) {
 fn enable_stats() {
     Dispatch::<Stats>::new().reduce_mut(|stats| stats.enable());
 }
+use gloo::timers::callback::Timeout;
 use gloo_storage::Storage;
 pub fn reset() {
     if !gloo::dialogs::confirm("Perform hard reset?") {
@@ -132,7 +138,7 @@ impl From<CombineFn> for Box<dyn Fn(usize, usize) -> (usize, Option<usize>)> {
     }
 }
 
-#[derive(Default, Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Upgrades {
     upgrades: HashMap<UpgradeType, Mrc<Upgrade>>,
 }
@@ -152,6 +158,7 @@ impl Upgrades {
         self.upgrades
             .values()
             .filter(|u| u.borrow().status != UpgradeStatus::Static)
+            .filter(|u| u.borrow().status != UpgradeStatus::Special)
     }
     pub fn is_done(&self, t: UpgradeType) -> bool {
         self.upgrades[&t].borrow().done
@@ -173,9 +180,9 @@ pub enum UpgradeStatus {
     OneTime,
     Static,
     Multiply(usize),
+    Special,
 }
 
-// #[derive(Debug, PartialEq, Serialize, Deserialize, Eq)]
 #[derive(Debug, PartialEq, Serialize, Deserialize, Eq, Clone)]
 pub struct Upgrade {
     max_level: usize,
@@ -189,8 +196,8 @@ pub struct Upgrade {
     pub text: String,
 }
 
-impl Store for Upgrades {
-    fn new() -> Self {
+impl Default for Upgrades {
+    fn default() -> Self {
         Self {
             upgrades: [
                 // Static stuff
@@ -204,7 +211,7 @@ impl Store for Upgrades {
                     .static_()
                     .build(),
                 Upgrade::new(Reset, Free(), Free(), "RESET")
-                    .static_()
+                    .special()
                     .build(),
                 // Onetime upgrades
                 Upgrade::new(
@@ -231,11 +238,12 @@ impl Store for Upgrades {
                 .build(),
                 Upgrade::new(
                     ScientificNotation,
-                    Harvested(128),
-                    Harvested(32),
+                    Harvested(1024),
+                    Harvested(256),
                     "ScientificNotation",
                 )
                 .build(),
+                Upgrade::new(AutoSave, AvgPoints(2), AvgPoints(1), "Save the Game").build(),
                 Upgrade::new(
                     AutoShuffle,
                     AvgPoints(20),
@@ -245,6 +253,13 @@ impl Store for Upgrades {
                 .build(),
                 Upgrade::new(EnableStatistics, 128, 32, "Show Statistics").build(),
                 Upgrade::new(BonusTile, Harvested(16), Harvested(16), "Bonus Tile").build(),
+                Upgrade::new(
+                    NlogNCost,
+                    Harvested(4096),
+                    Harvested(1024),
+                    "Bonus Points when Harvesting",
+                )
+                .build(),
                 Upgrade::new(
                     SliderPoint,
                     NumberOnBoard(4),
@@ -256,6 +271,13 @@ impl Store for Upgrades {
             ]
             .into(),
         }
+    }
+}
+impl Store for Upgrades {
+    fn new() -> Self {
+        storage::load(storage::Area::Local)
+            .expect("Unable to load state")
+            .unwrap_or_default()
     }
     fn should_notify(&self, _old: &Self) -> bool {
         true
@@ -305,6 +327,7 @@ impl Upgrade {
                 self.show = self.show.multiply(i);
                 self.visible.set(false);
             }
+            UpgradeStatus::Special => {}
         }
         if self.level == self.max_level {
             self.done = true;
@@ -339,6 +362,10 @@ impl Upgrade {
     }
     pub fn static_(mut self) -> Self {
         self.status = UpgradeStatus::Static;
+        self
+    }
+    pub fn special(mut self) -> Self {
+        self.status = UpgradeStatus::Special;
         self
     }
     pub fn multiply(mut self, i: usize) -> Self {

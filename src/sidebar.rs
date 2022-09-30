@@ -35,7 +35,7 @@ pub fn sidebar() -> Html {
         html! {<UpgradeButton {upgrade_type}/>}
 
     });
-    let upgrades = upgrades.onetime().map(|upgrade| {
+    let onetime = upgrades.onetime().map(|upgrade| {
         let upgrade_type = upgrade.borrow().t;
         html! {<UpgradeButton {upgrade_type}/>}
 
@@ -86,11 +86,16 @@ pub fn sidebar() -> Html {
             </div>
             <div class={classes!("float-right", "w-1/6", "grid-cols-1", "grid-rows-6", "h-1/2")} >
                 <p> {"Upgrades"} </p>
-                {upgrades.collect::<Vec<_>>()}
+                {onetime.collect::<Vec<_>>()}
 
                 <p> {"Sliders"} <ShowSliderPoints/> </p>
                  {sliders}
             <ShowAutoActions/>
+            </div>
+
+            <div class={classes!("bottom-0")}>
+                <UpgradeButton upgrade_type={Reset}/>
+
 
             </div>
         </div>

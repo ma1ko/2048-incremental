@@ -28,14 +28,16 @@ macro_rules! run {
 }
 
 pub fn do_save() {
-    return;
+    // return;
     info!("Saving");
 
-    // save!(Upgrades);
-    // save!(Points);
-    // save!(UpgradeableBoard);
-    // save!(AutoActions);
-    // save!(Stats);
+    save!(Upgrades);
+    save!(Points);
+    save!(UpgradeableBoard);
+    save!(AutoActions);
+    save!(Stats);
+    save!(Sliders);
+    save!(SliderPoints);
     // save!(Shuffles);
     // save!(Bonus);
 }
@@ -46,18 +48,25 @@ pub struct AutoActions {
 }
 impl Store for AutoActions {
     fn new() -> Self {
+        storage::load(storage::Area::Local)
+            .expect("Unable to load state")
+            .unwrap_or_default()
+    }
+    fn should_notify(&self, _old: &Self) -> bool {
+        true
+    }
+}
+impl Default for AutoActions {
+    fn default() -> Self {
         Self {
             actions: [
                 (AutoMove, AutoAction::new(AutoMove, 1000, false)),
                 (RandomPlace, AutoAction::new(RandomPlace, 1000, false)),
                 (AutoShuffle, AutoAction::new(AutoShuffle, 10000, false)),
-                (AutoSave, AutoAction::new(AutoSave, 1000, true)),
+                (AutoSave, AutoAction::new(AutoSave, 10000, false)),
             ]
             .into(),
         }
-    }
-    fn should_notify(&self, _old: &Self) -> bool {
-        true
     }
 }
 impl AutoActions {
@@ -132,14 +141,16 @@ pub fn show_auto_actions() -> Html {
     let dispatch = Dispatch::<AutoActions>::new().get();
 
     let html = dispatch.actions.keys().cloned().map(|action_type| {
-        if action_type == AutoSave {
-            html! {}
-        } else {
-            html! {<>
-                <DoAutoAction {action_type}/>
-                <ShowCountdown {action_type}/>
-            </>}
-        }
+        // if action_type == AutoSave {
+        //     html! {
+        //         <ShowCountdown {action_type}/>
+        //     }
+        // } else {
+        html! {<>
+            <DoAutoAction {action_type}/>
+            <ShowCountdown {action_type}/>
+        </>}
+        // }
     });
 
     html.collect()
@@ -180,12 +191,19 @@ pub fn countdown(props: &Props) -> Html {
         return html! {};
     }
     if action.current <= 100 {
-        Dispatch::<Sliders>::new().get().run(&t);
         action.current = action.max;
+        // create a callback to avoid borrowing issues
+        Callback::from(move |_| {
+            Dispatch::<Sliders>::new().get().run(&t);
+        }).emit(0);
     } else {
         action.current -= 100;
     }
+    // if action.t == AutoSave {
+    //     Default::default()
+    // } else {
     html! {
         <p> {format!("{:?}:", action.t)} {action.current} {"/"} {action.max} </p>
     }
+    // }
 }

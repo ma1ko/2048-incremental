@@ -46,10 +46,7 @@ impl Store for Points {
         self != old
     }
 }
-pub enum BonusType {
-    // Shuffles(i
 
-}
 
 /*
 #[derive(Default,Clone, Serialize, Deserialize, PartialEq)]

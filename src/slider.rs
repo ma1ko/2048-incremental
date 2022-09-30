@@ -48,31 +48,44 @@ pub struct Sliders {
 }
 impl Store for Sliders {
     fn new() -> Self {
-        Self {
-            sliders: [
-                (ExtendX, Slider::new(ExtendX, "Extend X")),
-                (ExtendY, Slider::new(ExtendY, "Extend Y")),
-                (AutoMove, Slider::new(AutoMove, "Automove")),
-                (RandomPlace, Slider::new(RandomPlace, "Auto place number")),
-                (AutoShuffle, Slider::new(AutoShuffle, "Autoshuffle")),
-            ]
-            .into(),
-        }
+        storage::load(storage::Area::Local)
+            .expect("Unable to load state")
+            .unwrap_or_default()
     }
     fn should_notify(&self, _old: &Self) -> bool {
         true
     }
 }
+impl Default for Sliders {
+    fn default() -> Self {
+        Self {
+            sliders: [
+                (ExtendX, Slider::new(ExtendX, "Board width")),
+                (ExtendY, Slider::new(ExtendY, "Board height")),
+                (AutoMove, Slider::new(AutoMove, "Automatic move speed")),
+                (RandomPlace, Slider::new(RandomPlace, "Auto placed value")),
+                (AutoShuffle, Slider::new(AutoShuffle, "Automatic Shuffling speed")),
+                (AutoSave, Slider::new(AutoSave, "Auto Save frequency")),
+            ]
+            .into(),
+        }
+    }
+}
 
 impl Sliders {
     pub fn get(&self, t: &UpgradeType) -> &Mrc<Slider> {
-        let slider = self.sliders.get(t).expect(&format!("Slider {:?} doesn't exist", t));
+        let slider = self
+            .sliders
+            .get(t)
+            .expect(&format!("Slider {:?} doesn't exist", t));
         slider
     }
     pub fn run(&self, t: &UpgradeType) {
-        let slider = self.sliders.get(t).expect(&format!("Slider {:?} doesn't exist", t));
+        let slider = self
+            .sliders
+            .get(t)
+            .expect(&format!("Slider {:?} doesn't exist", t));
         t.run(slider.borrow().current);
-
     }
 }
 impl Index<&UpgradeType> for Sliders {
@@ -108,16 +121,19 @@ impl Slider {
         self.max > 0
     }
     pub fn increase(&mut self) {
-        if self.current == self.max {
+        let p = Dispatch::<SliderPoints>::new();
+        if self.current == self.max || p.get().points == 0 {
             return;
         } else {
             self.current += 1;
+            p.reduce_mut(|p| p.sub(1));
         }
     }
     pub fn decrease(&mut self) {
         if self.current == 0 {
             return;
         } else {
+            Dispatch::<SliderPoints>::new().reduce_mut(|p| p.add(1));
             self.current -= 1;
         }
     }
@@ -144,6 +160,7 @@ pub fn show_slider(props: &Props) -> Html {
     let mut slider = slider.as_ref().borrow_mut();
     let upgrade = use_selector(move |u: &Upgrades| u[&slider_type].clone());
     let upgrade = upgrade.as_ref().borrow();
+    let (slider_points, _) = use_store::<SliderPoints>();
 
     if upgrade.level != slider.max {
         slider.max = upgrade.level;
@@ -177,7 +194,7 @@ pub fn show_slider(props: &Props) -> Html {
     let dec_button = html! {
         <button class={class.clone()} onclick={decrease}>{"-"} </button>
     };
-    if slider.current < slider.max {
+    if slider.current < slider.max && slider_points.points >= 1 {
         class.push("bg-green-400");
     }
     let inc_button = html! {
